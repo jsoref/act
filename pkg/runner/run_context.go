@@ -492,6 +492,7 @@ func (rc *RunContext) withGithubEnv(env map[string]string) map[string]string {
 	env["ACTIONS_RUNTIME_TOKEN"] = fmt.Sprintf("%s%s", generateInvocationID(), generateInvocationID())
 	env["ACTIONS_RUNTIME_URL"] = fmt.Sprintf("http://pipelines.actions.localhost.localdomain/%s/", actionsInstance)
 	env["CI"] = "true"
+	env["INVOCATION_ID"] = generateInvocationID()
 	return env
 }
 
