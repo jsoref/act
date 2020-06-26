@@ -2,13 +2,17 @@ package runner
 
 import (
 	"context"
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/nektos/act/pkg/container"
 
@@ -451,6 +455,22 @@ func nestedMapLookup(m map[string]interface{}, ks ...string) (rval interface{}) 
 	}
 }
 
+func randomTimestamp() time.Time {
+	randomTime := rand.Int63n(time.Now().Unix()-94608000) + 94608000
+
+	randomNow := time.Unix(randomTime, 0)
+
+	return randomNow
+}
+
+func generateInvocationID() string {
+	const layout = "January 02, 2006 at 03:04 pm (MST -07:00)"
+	t := randomTimestamp()
+	hasher := md5.New()
+	hasher.Write([]byte(t.Format(layout)))
+	return hex.EncodeToString(hasher.Sum(nil))
+}
+
 func (rc *RunContext) withGithubEnv(env map[string]string) map[string]string {
 	github := rc.getGithubContext()
 	env["HOME"] = "/github/home"
@@ -467,6 +487,10 @@ func (rc *RunContext) withGithubEnv(env map[string]string) map[string]string {
 	env["GITHUB_SHA"] = github.Sha
 	env["GITHUB_REF"] = github.Ref
 	env["GITHUB_TOKEN"] = github.Token
+	actionsInstance := fmt.Sprintf("%.25s%.25s", generateInvocationID(), generateInvocationID())
+	env["ACTIONS_CACHE_URL"] = fmt.Sprintf("http://artifactcache.actions.localhost.localdomain/%s/", actionsInstance)
+	env["ACTIONS_RUNTIME_TOKEN"] = fmt.Sprintf("%s%s", generateInvocationID(), generateInvocationID())
+	env["ACTIONS_RUNTIME_URL"] = fmt.Sprintf("http://pipelines.actions.localhost.localdomain/%s/", actionsInstance)
 	return env
 }
 
