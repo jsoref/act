@@ -170,7 +170,7 @@ func updateTestIfWorkflow(t *testing.T, tables []struct {
 `, k, rc.Env[k])
 	}
 	workflow := fmt.Sprintf(`
-name: "Test what expressions result in true and false on Github"
+name: "Test what expressions result in true and false on GitHub"
 on: push
 
 env:
