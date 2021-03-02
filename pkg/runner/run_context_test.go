@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 	"testing"
 
@@ -157,11 +158,16 @@ func updateTestIfWorkflow(t *testing.T, tables []struct {
 	wantErr bool
 }, rc *RunContext) {
 
+	keys := make([]string, 0)
+	for k := range rc.Env {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
 	var envs string
-	for k, v := range rc.Env {
+	for _, k := range keys {
 		envs += fmt.Sprintf(
 			`  %s: %s
-`, k, v)
+`, k, rc.Env[k])
 	}
 	workflow := fmt.Sprintf(`
 name: "Test what expressions result in true and false on Github"

@@ -3,10 +3,10 @@ name: "Test what expressions result in true and false on Github"
 on: push
 
 env:
-  SOMETHING_TRUE: true
-  SOMETHING_FALSE: false
-  SOME_TEXT: text
   ACT: true
+  SOMETHING_FALSE: false
+  SOMETHING_TRUE: true
+  SOME_TEXT: text
 
 
 jobs:

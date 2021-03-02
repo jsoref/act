@@ -3,12 +3,12 @@ name: "Test how expressions are handled on Github"
 on: push
 
 env:
-  KEYWITHNOTHING: valuewithnothing
-  KEY-WITH-HYPHENS: value-with-hyphens
-  KEY_WITH_UNDERSCORES: value_with_underscores
-  SOMETHING_TRUE: true
-  SOMETHING_FALSE: false
   ACT: true
+  KEY-WITH-HYPHENS: value-with-hyphens
+  KEYWITHNOTHING: valuewithnothing
+  KEY_WITH_UNDERSCORES: value_with_underscores
+  SOMETHING_FALSE: false
+  SOMETHING_TRUE: true
 
 
 jobs:
@@ -26,6 +26,9 @@ jobs:
        run: echo "Done "
 
      - name:  €{{ env.KEY_WITH_UNDERSCORES }}  ->  ${{ env.KEY_WITH_UNDERSCORES }}  should be equal to  value_with_underscores 
+       run: echo "Done "
+
+     - name:  €{{ secrets.lower_case_secret }}  ->  ${{ secrets.lower_case_secret }}  should be equal to  value 
        run: echo "Done "
 
      - name: €{{ env.UNKNOWN }} -> ${{ env.UNKNOWN }} should be equal to 
