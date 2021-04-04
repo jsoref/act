@@ -18,6 +18,7 @@ import (
 	"github.com/go-git/go-billy/v5/osfs"
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 
+	dockerCommand "github.com/docker/cli/cli/command"
 	"github.com/docker/cli/cli/connhelper"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -181,6 +182,12 @@ func GetDockerClient(ctx context.Context) (*client.Client, error) {
 	//       though i'm not sure how that works out when there's another Executor :D
 	//		 I really would like something that works on OSX native for eg
 	dockerHost := os.Getenv("DOCKER_HOST")
+	if dockerHost == "" {
+		dockerCli, _ := dockerCommand.NewDockerCli()
+		if dockerCli != nil {
+			dockerHost = dockerCli.DockerEndpoint().Host
+		}
+	}
 
 	if strings.HasPrefix(dockerHost, "ssh://") {
 		var helper *connhelper.ConnectionHelper
