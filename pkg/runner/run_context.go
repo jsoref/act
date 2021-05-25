@@ -21,19 +21,20 @@ import (
 
 // RunContext contains info about current job
 type RunContext struct {
-	Name           string
-	Config         *Config
-	Matrix         map[string]interface{}
-	Run            *model.Run
-	EventJSON      string
-	Env            map[string]string
-	ExtraPath      []string
-	CurrentStep    string
-	StepResults    map[string]*stepResult
-	ExprEval       ExpressionEvaluator
-	JobContainer   container.Container
-	OutputMappings map[MappableOutput]MappableOutput
-	JobName        string
+	GithubContextBase *string
+	Name              string
+	Config            *Config
+	Matrix            map[string]interface{}
+	Run               *model.Run
+	EventJSON         string
+	Env               map[string]string
+	ExtraPath         []string
+	CurrentStep       string
+	StepResults       map[string]*StepResult
+	ExprEval          ExpressionEvaluator
+	JobContainer      container.Container
+	OutputMappings    map[MappableOutput]MappableOutput
+	JobName           string
 }
 
 type MappableOutput struct {
@@ -45,7 +46,7 @@ func (rc *RunContext) String() string {
 	return fmt.Sprintf("%s/%s", rc.Run.Workflow.Name, rc.Name)
 }
 
-type stepResult struct {
+type StepResult struct {
 	Success bool              `json:"success"`
 	Outputs map[string]string `json:"outputs"`
 }
@@ -231,7 +232,7 @@ func (rc *RunContext) newStepExecutor(step *model.Step) common.Executor {
 	}
 	return func(ctx context.Context) error {
 		rc.CurrentStep = sc.Step.ID
-		rc.StepResults[rc.CurrentStep] = &stepResult{
+		rc.StepResults[rc.CurrentStep] = &StepResult{
 			Success: true,
 			Outputs: make(map[string]string),
 		}
@@ -454,7 +455,7 @@ func (rc *RunContext) getJobContext() *jobContext {
 	}
 }
 
-func (rc *RunContext) getStepsContext() map[string]*stepResult {
+func (rc *RunContext) getStepsContext() map[string]*StepResult {
 	return rc.StepResults
 }
 
@@ -505,107 +506,111 @@ func (rc *RunContext) getGithubContext() *githubContext {
 		RunnerPerflog:    rc.Config.Env["RUNNER_PERFLOG"],
 		RunnerTrackingID: rc.Config.Env["RUNNER_TRACKING_ID"],
 	}
-
-	if ghc.RunID == "" {
-		ghc.RunID = "1"
-	}
-
-	if ghc.RunNumber == "" {
-		ghc.RunNumber = "1"
-	}
-
-	if ghc.RetentionDays == "" {
-		ghc.RetentionDays = "0"
-	}
-
-	if ghc.RunnerPerflog == "" {
-		ghc.RunnerPerflog = "/dev/null"
-	}
-
-	// Backwards compatibility for configs that require
-	// a default rather than being run as a cmd
-	if ghc.Actor == "" {
-		ghc.Actor = "nektos/act"
-	}
-
-	repoPath := rc.Config.Workdir
-	repo, err := common.FindGithubRepo(repoPath, rc.Config.GitHubInstance)
-	if err != nil {
-		log.Warningf("unable to get git repo: %v", err)
+	if rc.GithubContextBase != nil {
+		json.Unmarshal([]byte(*rc.GithubContextBase), ghc)
 	} else {
-		ghc.Repository = repo
-		if ghc.RepositoryOwner == "" {
-			ghc.RepositoryOwner = strings.Split(repo, "/")[0]
+		if ghc.RunID == "" {
+			ghc.RunID = "1"
 		}
-	}
 
-	_, sha, err := common.FindGitRevision(repoPath)
-	if err != nil {
-		log.Warningf("unable to get git revision: %v", err)
-	} else {
-		ghc.Sha = sha
-	}
+		if ghc.RunNumber == "" {
+			ghc.RunNumber = "1"
+		}
 
-	if rc.EventJSON != "" {
-		err = json.Unmarshal([]byte(rc.EventJSON), &ghc.Event)
+		if ghc.RetentionDays == "" {
+			ghc.RetentionDays = "0"
+		}
+
+		if ghc.RunnerPerflog == "" {
+			ghc.RunnerPerflog = "/dev/null"
+		}
+
+		// Backwards compatibility for configs that require
+		// a default rather than being run as a cmd
+		if ghc.Actor == "" {
+			ghc.Actor = "nektos/act"
+		}
+
+		repoPath := rc.Config.Workdir
+		repo, err := common.FindGithubRepo(repoPath, rc.Config.GitHubInstance)
 		if err != nil {
-			log.Errorf("Unable to Unmarshal event '%s': %v", rc.EventJSON, err)
+			log.Warningf("unable to get git repo: %v", err)
+		} else {
+			ghc.Repository = repo
+			if ghc.RepositoryOwner == "" {
+				ghc.RepositoryOwner = strings.Split(repo, "/")[0]
+			}
 		}
-	}
 
-	maybeRef := nestedMapLookup(ghc.Event, ghc.EventName, "ref")
-	if maybeRef != nil {
-		log.Debugf("using github ref from event: %s", maybeRef)
-		ghc.Ref = maybeRef.(string)
-	} else {
-		ref, err := common.FindGitRef(repoPath)
+		_, sha, err := common.FindGitRevision(repoPath)
 		if err != nil {
-			log.Warningf("unable to get git ref: %v", err)
+			log.Warningf("unable to get git revision: %v", err)
 		} else {
-			log.Debugf("using github ref: %s", ref)
-			ghc.Ref = ref
+			ghc.Sha = sha
 		}
 
-		// set the branch in the event data
-		if rc.Config.DefaultBranch != "" {
-			ghc.Event = withDefaultBranch(rc.Config.DefaultBranch, ghc.Event)
-		} else {
-			ghc.Event = withDefaultBranch("master", ghc.Event)
+		if rc.EventJSON != "" {
+			err = json.Unmarshal([]byte(rc.EventJSON), &ghc.Event)
+			if err != nil {
+				log.Errorf("Unable to Unmarshal event '%s': %v", rc.EventJSON, err)
+			}
 		}
-	}
 
-	if ghc.EventName == "pull_request" {
-		ghc.BaseRef = asString(nestedMapLookup(ghc.Event, "pull_request", "base", "ref"))
-		ghc.HeadRef = asString(nestedMapLookup(ghc.Event, "pull_request", "head", "ref"))
+		maybeRef := nestedMapLookup(ghc.Event, ghc.EventName, "ref")
+		if maybeRef != nil {
+			log.Debugf("using github ref from event: %s", maybeRef)
+			ghc.Ref = maybeRef.(string)
+		} else {
+			ref, err := common.FindGitRef(repoPath)
+			if err != nil {
+				log.Warningf("unable to get git ref: %v", err)
+			} else {
+				log.Debugf("using github ref: %s", ref)
+				ghc.Ref = ref
+			}
+
+			// set the branch in the event data
+			if rc.Config.DefaultBranch != "" {
+				ghc.Event = withDefaultBranch(rc.Config.DefaultBranch, ghc.Event)
+			} else {
+				ghc.Event = withDefaultBranch("master", ghc.Event)
+			}
+		}
+
+		if ghc.EventName == "pull_request" {
+			ghc.BaseRef = asString(nestedMapLookup(ghc.Event, "pull_request", "base", "ref"))
+			ghc.HeadRef = asString(nestedMapLookup(ghc.Event, "pull_request", "head", "ref"))
+		}
 	}
 
 	return ghc
 }
 
 func (ghc *githubContext) isLocalCheckout(step *model.Step) bool {
-	if step.Type() == model.StepTypeInvalid {
-		// This will be errored out by the executor later, we need this here to avoid a null panic though
-		return false
-	}
-	if step.Type() != model.StepTypeUsesActionRemote {
-		return false
-	}
-	remoteAction := newRemoteAction(step.Uses)
-	if remoteAction == nil {
-		// IsCheckout() will nil panic if we dont bail out early
-		return false
-	}
-	if !remoteAction.IsCheckout() {
-		return false
-	}
+	return false
+	// if step.Type() == model.StepTypeInvalid {
+	// 	// This will be errored out by the executor later, we need this here to avoid a null panic though
+	// 	return false
+	// }
+	// if step.Type() != model.StepTypeUsesActionRemote {
+	// 	return false
+	// }
+	// remoteAction := newRemoteAction(step.Uses)
+	// if remoteAction == nil {
+	// 	// IsCheckout() will nil panic if we dont bail out early
+	// 	return false
+	// }
+	// if !remoteAction.IsCheckout() {
+	// 	return false
+	// }
 
-	if repository, ok := step.With["repository"]; ok && repository != ghc.Repository {
-		return false
-	}
-	if repository, ok := step.With["ref"]; ok && repository != ghc.Ref {
-		return false
-	}
-	return true
+	// if repository, ok := step.With["repository"]; ok && repository != ghc.Repository {
+	// 	return false
+	// }
+	// if repository, ok := step.With["ref"]; ok && repository != ghc.Ref {
+	// 	return false
+	// }
+	// return true
 }
 
 func asString(v interface{}) string {
