@@ -125,9 +125,13 @@ func (sc *StepContext) mergeEnv() map[string]string {
 		env = mergeMaps(rc.GetEnv(), step.GetEnv())
 	}
 
-	env["PATH"] = `/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`
-	if (rc.ExtraPath != nil) && (len(rc.ExtraPath) > 0) {
+	if env["PATH"] == "" {
+		env["PATH"] = `/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`
+	}
+	if rc.ExtraPath != nil && len(rc.ExtraPath) > 0 {
+		p := env["PATH"]
 		env["PATH"] = strings.Join(rc.ExtraPath, `:`)
+		env["PATH"] += `:` + p
 	}
 
 	sc.Env = rc.withGithubEnv(env)
@@ -173,6 +177,7 @@ func (sc *StepContext) setupShellCommand() common.Executor {
 		if step.WorkingDirectory == "" {
 			step.WorkingDirectory = rc.Run.Workflow.Defaults.Run.WorkingDirectory
 		}
+		step.WorkingDirectory = rc.ExprEval.Interpolate(step.WorkingDirectory)
 		if step.WorkingDirectory != "" {
 			_, err = script.WriteString(fmt.Sprintf("cd %s\n", step.WorkingDirectory))
 			if err != nil {
@@ -181,6 +186,7 @@ func (sc *StepContext) setupShellCommand() common.Executor {
 		}
 
 		run := rc.ExprEval.Interpolate(step.Run)
+		step.Shell = rc.ExprEval.Interpolate(step.Shell)
 
 		if _, err = script.WriteString(run); err != nil {
 			return err
@@ -299,7 +305,7 @@ func (sc *StepContext) runUsesContainer() common.Executor {
 		return common.NewPipelineExecutor(
 			stepContainer.Pull(rc.Config.ForcePull),
 			stepContainer.Remove().IfBool(!rc.Config.ReuseContainers),
-			stepContainer.Create(),
+			stepContainer.Create(rc.Config.ContainerCapAdd, rc.Config.ContainerCapDrop),
 			stepContainer.Start(true),
 		).Finally(
 			stepContainer.Remove().IfBool(!rc.Config.ReuseContainers),
@@ -381,15 +387,13 @@ func getOsSafeRelativePath(s, prefix string) string {
 func (sc *StepContext) getContainerActionPaths(step *model.Step, actionDir string, rc *RunContext) (string, string) {
 	actionName := ""
 	containerActionDir := "."
-	if !rc.Config.BindWorkdir && step.Type() != model.StepTypeUsesActionRemote {
+	if step.Type() != model.StepTypeUsesActionRemote {
 		actionName = getOsSafeRelativePath(actionDir, rc.Config.Workdir)
-		containerActionDir = rc.Config.ContainerWorkdir() + "/_actions/" + actionName
+		containerActionDir = rc.Config.ContainerWorkdir() + "/" + actionName
+		actionName = "./" + actionName
 	} else if step.Type() == model.StepTypeUsesActionRemote {
 		actionName = getOsSafeRelativePath(actionDir, rc.ActionCacheDir())
-		containerActionDir = rc.Config.ContainerWorkdir() + "/_actions/" + actionName
-	} else if step.Type() == model.StepTypeUsesActionLocal {
-		actionName = getOsSafeRelativePath(actionDir, rc.Config.Workdir)
-		containerActionDir = rc.Config.ContainerWorkdir() + "/_actions/" + actionName
+		containerActionDir = ActPath + "/actions/" + actionName
 	}
 
 	if actionName == "" {
@@ -422,11 +426,9 @@ func (sc *StepContext) runAction(actionDir string, actionPath string) common.Exe
 		log.Debugf("type=%v actionDir=%s actionPath=%s Workdir=%s ActionCacheDir=%s actionName=%s containerActionDir=%s", step.Type(), actionDir, actionPath, rc.Config.Workdir, rc.ActionCacheDir(), actionName, containerActionDir)
 
 		maybeCopyToActionDir := func() error {
+			sc.Env["GITHUB_ACTION_PATH"] = containerActionDir
 			if step.Type() != model.StepTypeUsesActionRemote {
-				// If the workdir is bound to our repository then we don't need to copy the file
-				if rc.Config.BindWorkdir {
-					return nil
-				}
+				return nil
 			}
 			err := removeGitIgnore(actionDir)
 			if err != nil {
@@ -517,7 +519,7 @@ func (sc *StepContext) execAsDocker(ctx context.Context, action *model.Action, a
 		prepImage,
 		stepContainer.Pull(rc.Config.ForcePull),
 		stepContainer.Remove().IfBool(!rc.Config.ReuseContainers),
-		stepContainer.Create(),
+		stepContainer.Create(rc.Config.ContainerCapAdd, rc.Config.ContainerCapDrop),
 		stepContainer.Start(true),
 	).Finally(
 		stepContainer.Remove().IfBool(!rc.Config.ReuseContainers),
@@ -570,26 +572,29 @@ func (sc *StepContext) execAsComposite(ctx context.Context, step *model.Step, _ 
 			}
 		}
 
-		if stepClone.Env == nil {
-			stepClone.Env = make(map[string]string)
-		}
-		actionPath := filepath.Join(containerActionDir, actionName)
-		stepClone.Env["GITHUB_ACTION_PATH"] = actionPath
-		stepClone.Run = strings.ReplaceAll(stepClone.Run, "${{ github.action_path }}", actionPath)
-
+		env := stepClone.Environment()
 		stepContext := StepContext{
 			RunContext: rcClone,
-			Step:       &stepClone,
-			Env:        mergeMaps(sc.Env, stepClone.Env),
+			Step:       step,
+			Env:        mergeMaps(sc.Env, env),
 		}
 
-		// Interpolate the outer inputs into the composite step with items
-		exprEval := sc.NewExpressionEvaluator()
-		for k, v := range stepContext.Step.With {
-			if strings.Contains(v, "inputs") {
-				stepContext.Step.With[k] = exprEval.Interpolate(v)
-			}
+		// Required to set github.action_path
+		if rcClone.Config.Env == nil {
+			// Workaround to get test working
+			rcClone.Config.Env = make(map[string]string)
 		}
+		rcClone.Config.Env["GITHUB_ACTION_PATH"] = sc.Env["GITHUB_ACTION_PATH"]
+		ev := stepContext.NewExpressionEvaluator()
+		// Required to interpolate inputs and github.action_path into the env map
+		stepContext.interpolateEnv(ev)
+		// Required to interpolate inputs, env and github.action_path into run steps
+		ev = stepContext.NewExpressionEvaluator()
+		stepClone.Run = ev.Interpolate(stepClone.Run)
+		stepClone.Shell = ev.Interpolate(stepClone.Shell)
+		stepClone.WorkingDirectory = ev.Interpolate(stepClone.WorkingDirectory)
+
+		stepContext.Step = &stepClone
 
 		executors = append(executors, stepContext.Executor())
 	}

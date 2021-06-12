@@ -32,6 +32,9 @@ type Input struct {
 	noWorkflowRecurse     bool
 	useGitIgnore          bool
 	githubInstance        string
+	containerCapAdd       []string
+	containerCapDrop      []string
+	autoRemove            bool
 }
 
 func (i *Input) resolve(path string) string {
