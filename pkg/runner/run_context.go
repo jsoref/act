@@ -97,7 +97,35 @@ func (rc *RunContext) GetBindsAndMounts() ([]string, map[string]string) {
 
 func (rc *RunContext) startJobContainer() common.Executor {
 	image := rc.platformImage()
+	if image == "-self-hosted" {
+		return func(ctx context.Context) error {
+			wd, _ := os.Getwd()
+			rc.JobContainer = &container.HostExecutor{Path: filepath.Join(wd, "hostreference")}
+			var copyWorkspace bool
+			var copyToPath string
+			if !rc.Config.BindWorkdir {
+				copyToPath, copyWorkspace = rc.localCheckoutPath()
+				copyToPath = filepath.Join(filepath.Join(wd, "hostreference"), copyToPath)
+			}
 
+			return common.NewPipelineExecutor(
+				rc.JobContainer.CopyDir(copyToPath, rc.Config.Workdir+string(filepath.Separator)+".", rc.Config.UseGitIgnore).IfBool(copyWorkspace),
+				rc.JobContainer.Copy(ActPath+"/", &container.FileEntry{
+					Name: "workflow/event.json",
+					Mode: 0644,
+					Body: rc.EventJSON,
+				}, &container.FileEntry{
+					Name: "workflow/envs.txt",
+					Mode: 0666,
+					Body: "",
+				}, &container.FileEntry{
+					Name: "workflow/paths.txt",
+					Mode: 0666,
+					Body: "",
+				}),
+			)(ctx)
+		}
+	}
 	return func(ctx context.Context) error {
 		rawLogger := common.Logger(ctx).WithField("raw_output", true)
 		logWriter := common.NewLineWriter(rc.commandHandler(ctx), func(s string) bool {
