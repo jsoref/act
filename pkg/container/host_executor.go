@@ -23,7 +23,6 @@ type HostExecutor struct {
 
 func (e *HostExecutor) Create(capAdd []string, capDrop []string) common.Executor {
 	return func(ctx context.Context) error {
-		os.MkdirAll(e.Path, 0777)
 		return nil
 	}
 }
@@ -84,6 +83,9 @@ func (e *HostExecutor) Exec(command []string, env map[string]string, user string
 		os.Setenv("PATH", env["PATH"])
 		f, _ := exec.LookPath(command[0])
 		os.Setenv("PATH", oldpath)
+		if len(f) == 0 {
+			f, _ = exec.LookPath(command[0])
+		}
 
 		cmd := &exec.Cmd{
 			Path:   f,
@@ -92,6 +94,7 @@ func (e *HostExecutor) Exec(command []string, env map[string]string, user string
 			Stdout: logWriter,
 			Env:    envList,
 			Stderr: logWriter,
+			Dir:    e.Path,
 		}
 		return cmd.Run()
 	}

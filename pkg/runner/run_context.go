@@ -100,6 +100,7 @@ func (rc *RunContext) startJobContainer() common.Executor {
 	if image == "-self-hosted" {
 		return func(ctx context.Context) error {
 			wd, _ := os.Getwd()
+			os.MkdirAll(filepath.Join(wd, "hostreference"), 0777)
 			rc.JobContainer = &container.HostExecutor{Path: filepath.Join(wd, "hostreference")}
 			var copyWorkspace bool
 			var copyToPath string
