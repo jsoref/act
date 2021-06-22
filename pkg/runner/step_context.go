@@ -219,7 +219,7 @@ func (sc *StepContext) setupShellCommand() common.Executor {
 		run = runPrepend + "\n" + run + "\n" + runAppend
 
 		log.Debugf("Wrote command '%s' to '%s'", run, scriptName)
-		containerPath := path.Join(ActPath, scriptName)
+		containerPath := path.Join(rc.GetActPath(), scriptName)
 
 		if step.Shell == "" {
 			step.Shell = rc.Run.Job().Defaults.Run.Shell
@@ -235,7 +235,7 @@ func (sc *StepContext) setupShellCommand() common.Executor {
 			sc.Cmd = strings.Fields(scResolvedCmd)
 		}
 
-		return rc.JobContainer.Copy(ActPath, &container.FileEntry{
+		return rc.JobContainer.Copy(rc.GetActPath(), &container.FileEntry{
 			Name: scriptName,
 			Mode: 0755,
 			Body: script.String(),
@@ -419,7 +419,7 @@ func (sc *StepContext) getContainerActionPaths(step *model.Step, actionDir strin
 		actionName = "./" + actionName
 	} else if step.Type() == model.StepTypeUsesActionRemote {
 		actionName = getOsSafeRelativePath(actionDir, rc.ActionCacheDir())
-		containerActionDir = ActPath + "/actions/" + actionName
+		containerActionDir = rc.GetActPath() + "/actions/" + actionName
 	}
 
 	if actionName == "" {

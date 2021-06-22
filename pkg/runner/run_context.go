@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/mitchellh/go-homedir"
 	log "github.com/sirupsen/logrus"
 
@@ -18,8 +19,6 @@ import (
 	"github.com/nektos/act/pkg/container"
 	"github.com/nektos/act/pkg/model"
 )
-
-const ActPath string = "/var/run/act"
 
 // RunContext contains info about current job
 type RunContext struct {
@@ -37,6 +36,18 @@ type RunContext struct {
 	JobContainer      container.Container
 	OutputMappings    map[MappableOutput]MappableOutput
 	JobName           string
+	actPath           string
+}
+
+func (rc *RunContext) SetActPath(actPath string) {
+	rc.actPath = actPath
+}
+
+func (rc *RunContext) GetActPath() string {
+	if len(rc.actPath) > 0 {
+		return rc.actPath
+	}
+	return "/var/run/act"
 }
 
 type MappableOutput struct {
@@ -99,19 +110,24 @@ func (rc *RunContext) startJobContainer() common.Executor {
 	image := rc.platformImage()
 	if image == "-self-hosted" {
 		return func(ctx context.Context) error {
-			wd, _ := os.Getwd()
-			os.MkdirAll(filepath.Join(wd, "hostreference"), 0777)
-			rc.JobContainer = &container.HostExecutor{Path: filepath.Join(wd, "hostreference")}
+			cacheDir := rc.ActionCacheDir()
+			path := filepath.Join(cacheDir, uuid.New().String())
+			actPath := filepath.Join(path, "act")
+			os.MkdirAll(actPath, 0777)
+			rc.SetActPath(actPath)
+			path = filepath.Join(path, "hostexecutor")
+			os.MkdirAll(path, 0777)
+			rc.JobContainer = &container.HostExecutor{Path: path}
 			var copyWorkspace bool
 			var copyToPath string
 			if !rc.Config.BindWorkdir {
 				copyToPath, copyWorkspace = rc.localCheckoutPath()
-				copyToPath = filepath.Join(filepath.Join(wd, "hostreference"), copyToPath)
+				copyToPath = filepath.Join(path, copyToPath)
 			}
 
 			return common.NewPipelineExecutor(
 				rc.JobContainer.CopyDir(copyToPath, rc.Config.Workdir+string(filepath.Separator)+".", rc.Config.UseGitIgnore).IfBool(copyWorkspace),
-				rc.JobContainer.Copy(ActPath+"/", &container.FileEntry{
+				rc.JobContainer.Copy(rc.GetActPath()+"/", &container.FileEntry{
 					Name: "workflow/event.json",
 					Mode: 0644,
 					Body: rc.EventJSON,
@@ -181,9 +197,9 @@ func (rc *RunContext) startJobContainer() common.Executor {
 			rc.JobContainer.Create(rc.Config.ContainerCapAdd, rc.Config.ContainerCapDrop),
 			rc.JobContainer.Start(false),
 			rc.JobContainer.UpdateFromEnv("/etc/environment", &rc.Env),
-			rc.JobContainer.Exec([]string{"mkdir", "-m", "0777", "-p", ActPath}, rc.Env, "root"),
+			rc.JobContainer.Exec([]string{"mkdir", "-m", "0777", "-p", rc.GetActPath()}, rc.Env, "root"),
 			rc.JobContainer.CopyDir(copyToPath, rc.Config.Workdir+string(filepath.Separator)+".", rc.Config.UseGitIgnore).IfBool(copyWorkspace),
-			rc.JobContainer.Copy(ActPath+"/", &container.FileEntry{
+			rc.JobContainer.Copy(rc.GetActPath()+"/", &container.FileEntry{
 				Name: "workflow/event.json",
 				Mode: 0644,
 				Body: rc.EventJSON,
@@ -520,7 +536,7 @@ type githubContext struct {
 func (rc *RunContext) getGithubContext() *githubContext {
 	ghc := &githubContext{
 		Event:            make(map[string]interface{}),
-		EventPath:        ActPath + "/workflow/event.json",
+		EventPath:        rc.GetActPath() + "/workflow/event.json",
 		Workflow:         rc.Run.Workflow.Name,
 		RunID:            rc.Config.Env["GITHUB_RUN_ID"],
 		RunNumber:        rc.Config.Env["GITHUB_RUN_NUMBER"],
@@ -696,8 +712,8 @@ func withDefaultBranch(b string, event map[string]interface{}) map[string]interf
 func (rc *RunContext) withGithubEnv(env map[string]string) map[string]string {
 	github := rc.getGithubContext()
 	env["CI"] = "true"
-	env["GITHUB_ENV"] = ActPath + "/workflow/envs.txt"
-	env["GITHUB_PATH"] = ActPath + "/workflow/paths.txt"
+	env["GITHUB_ENV"] = rc.GetActPath() + "/workflow/envs.txt"
+	env["GITHUB_PATH"] = rc.GetActPath() + "/workflow/paths.txt"
 	env["GITHUB_WORKFLOW"] = github.Workflow
 	env["GITHUB_RUN_ID"] = github.RunID
 	env["GITHUB_RUN_NUMBER"] = github.RunNumber
