@@ -3,6 +3,7 @@ package container
 import (
 	"archive/tar"
 	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -11,8 +12,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
+	"strings"
 
-	"github.com/docker/docker/pkg/archive"
 	"github.com/nektos/act/pkg/common"
 	"github.com/pkg/errors"
 )
@@ -39,21 +41,54 @@ func (e *HostExecutor) Copy(destPath string, files ...*FileEntry) common.Executo
 
 func (e *HostExecutor) CopyDir(destPath string, srcPath string, useGitIgnore bool) common.Executor {
 	return func(ctx context.Context) error {
-		tarArchive, err := archive.TarWithOptions(srcPath, &archive.TarOptions{
-			Compression: archive.Uncompressed,
+		return filepath.Walk(srcPath, func(file string, fi os.FileInfo, err error) error {
+			if fi.Mode()&os.ModeSymlink != 0 {
+				lnk, _ := os.Readlink(file)
+				relpath, _ := filepath.Rel(srcPath, file)
+				fdestpath := filepath.Join(destPath, relpath)
+				os.MkdirAll(filepath.Base(fdestpath), 0777)
+				os.Symlink(lnk, fdestpath)
+			} else if fi.Mode().IsRegular() {
+				relpath, _ := filepath.Rel(srcPath, file)
+				f, _ := os.Open(file)
+				defer f.Close()
+				fdestpath := filepath.Join(destPath, relpath)
+				os.MkdirAll(filepath.Base(fdestpath), 0777)
+				df, _ := os.OpenFile(fdestpath, os.O_CREATE|os.O_WRONLY, fi.Mode())
+				defer df.Close()
+				io.Copy(df, f)
+			}
+			return nil
 		})
-		if err != nil {
-			return err
-		}
-		os.MkdirAll(destPath, 0777)
-		return archive.UntarUncompressed(tarArchive, destPath, &archive.TarOptions{})
 	}
 }
 
 func (e *HostExecutor) GetContainerArchive(ctx context.Context, srcPath string) (io.ReadCloser, error) {
-	return archive.TarWithOptions(srcPath, &archive.TarOptions{
-		Compression: archive.Uncompressed,
+	buf := &bytes.Buffer{}
+	tw := tar.NewWriter(buf)
+	filepath.Walk(srcPath, func(file string, fi os.FileInfo, err error) error {
+		if fi.Mode()&os.ModeSymlink != 0 {
+			lnk, _ := os.Readlink(file)
+			fih, _ := tar.FileInfoHeader(fi, lnk)
+			fih.Name, _ = filepath.Rel(srcPath, file)
+			if string(filepath.Separator) != "/" {
+				fih.Name = strings.ReplaceAll(fih.Name, string(filepath.Separator), "/")
+			}
+			tw.WriteHeader(fih)
+		} else if fi.Mode().IsRegular() {
+			fih, _ := tar.FileInfoHeader(fi, "")
+			fih.Name, _ = filepath.Rel(srcPath, file)
+			if string(filepath.Separator) != "/" {
+				fih.Name = strings.ReplaceAll(fih.Name, string(filepath.Separator), "/")
+			}
+			tw.WriteHeader(fih)
+			f, _ := os.Open(file)
+			defer f.Close()
+			io.Copy(tw, f)
+		}
+		return nil
 	})
+	return io.NopCloser(buf), nil
 }
 
 func (e *HostExecutor) Pull(forcePull bool) common.Executor {
@@ -76,6 +111,9 @@ func (e *HostExecutor) Exec(command []string, env map[string]string, user string
 			return true
 		})
 		envList := make([]string, 0)
+		if runtime.GOOS == "windows" && env["PATHEXT"] == "" {
+			env["PATHEXT"] = ".COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC;.CPL"
+		}
 		for k, v := range env {
 			envList = append(envList, fmt.Sprintf("%s=%s", k, v))
 		}
@@ -100,10 +138,13 @@ func (e *HostExecutor) Exec(command []string, env map[string]string, user string
 	}
 }
 
+var _singleLineEnvPattern *regexp.Regexp
+var _mulitiLineEnvPattern *regexp.Regexp
+
 func (e *HostExecutor) UpdateFromEnv(srcPath string, env *map[string]string) common.Executor {
-	if singleLineEnvPattern == nil {
-		singleLineEnvPattern = regexp.MustCompile("^([^=]+)=([^=]+)$")
-		mulitiLineEnvPattern = regexp.MustCompile(`^([^<]+)<<(\w+)$`)
+	if _singleLineEnvPattern == nil {
+		_singleLineEnvPattern = regexp.MustCompile("^([^=]+)=([^=]+)$")
+		_mulitiLineEnvPattern = regexp.MustCompile(`^([^<]+)<<(\w+)$`)
 	}
 
 	localEnv := *env
@@ -124,7 +165,7 @@ func (e *HostExecutor) UpdateFromEnv(srcPath string, env *map[string]string) com
 		multiLineEnvContent := ""
 		for s.Scan() {
 			line := s.Text()
-			if singleLineEnv := singleLineEnvPattern.FindStringSubmatch(line); singleLineEnv != nil {
+			if singleLineEnv := _singleLineEnvPattern.FindStringSubmatch(line); singleLineEnv != nil {
 				localEnv[singleLineEnv[1]] = singleLineEnv[2]
 			}
 			if line == multiLineEnvDelimiter {
@@ -137,7 +178,7 @@ func (e *HostExecutor) UpdateFromEnv(srcPath string, env *map[string]string) com
 				}
 				multiLineEnvContent += line
 			}
-			if mulitiLineEnvStart := mulitiLineEnvPattern.FindStringSubmatch(line); mulitiLineEnvStart != nil {
+			if mulitiLineEnvStart := _mulitiLineEnvPattern.FindStringSubmatch(line); mulitiLineEnvStart != nil {
 				multiLineEnvKey = mulitiLineEnvStart[1]
 				multiLineEnvDelimiter = mulitiLineEnvStart[2]
 			}
@@ -148,9 +189,6 @@ func (e *HostExecutor) UpdateFromEnv(srcPath string, env *map[string]string) com
 }
 
 func (e *HostExecutor) UpdateFromPath(env *map[string]string) common.Executor {
-	// return func(ctx context.Context) error {
-	// 	return nil
-	// }
 	localEnv := *env
 	return func(ctx context.Context) error {
 		pathTar, err := e.GetContainerArchive(ctx, localEnv["GITHUB_PATH"])
@@ -167,7 +205,8 @@ func (e *HostExecutor) UpdateFromPath(env *map[string]string) common.Executor {
 		s := bufio.NewScanner(reader)
 		for s.Scan() {
 			line := s.Text()
-			localEnv["PATH"] = fmt.Sprintf("%s:%s", line, localEnv["PATH"])
+			pathSep := string(filepath.ListSeparator)
+			localEnv["PATH"] = fmt.Sprintf("%s%s%s", line, pathSep, localEnv["PATH"])
 		}
 
 		env = &localEnv
