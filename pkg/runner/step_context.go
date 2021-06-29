@@ -620,7 +620,7 @@ func (sc *StepContext) execAsComposite(ctx context.Context, step *model.Step, _ 
 
 		// Setup the outputs for the composite steps
 		if _, ok := rcClone.StepResults[stepClone.ID]; !ok {
-			rcClone.StepResults[stepClone.ID] = &StepResult{
+			rcClone.StepResults[stepClone.ID] = &stepResult{
 				Success: true,
 				Outputs: make(map[string]string),
 			}

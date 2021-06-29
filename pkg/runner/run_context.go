@@ -31,12 +31,19 @@ type RunContext struct {
 	Env               map[string]string
 	ExtraPath         []string
 	CurrentStep       string
-	StepResults       map[string]*StepResult
+	StepResults       map[string]*stepResult
 	ExprEval          ExpressionEvaluator
 	JobContainer      container.Container
 	OutputMappings    map[MappableOutput]MappableOutput
 	JobName           string
 	actPath           string
+}
+
+func (rc *RunContext) InitStepResults(keys []string) {
+	rc.StepResults = make(map[string]*stepResult, len(keys))
+	for i := 0; i < len(keys); i++ {
+		rc.StepResults[keys[i]] = &stepResult{Success: true}
+	}
 }
 
 func (rc *RunContext) SetActPath(actPath string) {
@@ -59,7 +66,7 @@ func (rc *RunContext) String() string {
 	return fmt.Sprintf("%s/%s", rc.Run.Workflow.Name, rc.Name)
 }
 
-type StepResult struct {
+type stepResult struct {
 	Success bool              `json:"success"`
 	Outputs map[string]string `json:"outputs"`
 }
@@ -130,6 +137,8 @@ func (rc *RunContext) startJobContainer() common.Executor {
 				copyToPath, copyWorkspace = rc.localCheckoutPath()
 				copyToPath = filepath.Join(path, copyToPath)
 			}
+			// Tell act to not change the filepath on windows
+			rc.Config.Local = true
 
 			return common.NewPipelineExecutor(
 				rc.JobContainer.CopyDir(copyToPath, rc.Config.Workdir+string(filepath.Separator)+".", rc.Config.UseGitIgnore).IfBool(copyWorkspace),
@@ -285,7 +294,7 @@ func (rc *RunContext) newStepExecutor(step *model.Step) common.Executor {
 	}
 	return func(ctx context.Context) error {
 		rc.CurrentStep = sc.Step.ID
-		rc.StepResults[rc.CurrentStep] = &StepResult{
+		rc.StepResults[rc.CurrentStep] = &stepResult{
 			Success: true,
 			Outputs: make(map[string]string),
 		}
@@ -508,7 +517,7 @@ func (rc *RunContext) getJobContext() *jobContext {
 	}
 }
 
-func (rc *RunContext) getStepsContext() map[string]*StepResult {
+func (rc *RunContext) getStepsContext() map[string]*stepResult {
 	return rc.StepResults
 }
 

@@ -42,7 +42,7 @@ func TestEvaluate(t *testing.T) {
 			"os":  "Linux",
 			"foo": "bar",
 		},
-		StepResults: map[string]*StepResult{
+		StepResults: map[string]*stepResult{
 			"idwithnothing": {
 				Outputs: map[string]string{
 					"foowithnothing": "barwithnothing",

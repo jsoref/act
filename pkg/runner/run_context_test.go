@@ -47,7 +47,7 @@ func TestRunContext_EvalBool(t *testing.T) {
 			"os":  "Linux",
 			"foo": "bar",
 		},
-		StepResults: map[string]*StepResult{
+		StepResults: map[string]*stepResult{
 			"id1": {
 				Outputs: map[string]string{
 					"foo": "bar",
@@ -300,7 +300,7 @@ func TestGetGitHubContext(t *testing.T) {
 		Matrix:         map[string]interface{}{},
 		Env:            map[string]string{},
 		ExtraPath:      []string{},
-		StepResults:    map[string]*StepResult{},
+		StepResults:    map[string]*stepResult{},
 		OutputMappings: map[MappableOutput]MappableOutput{},
 	}
 
