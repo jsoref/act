@@ -31,12 +31,13 @@ type StepContext struct {
 	Step       *model.Step
 	Env        map[string]string
 	Cmd        []string
+	Cmdline    string
 	Action     *model.Action
 }
 
 func (sc *StepContext) execJobContainer() common.Executor {
 	return func(ctx context.Context) error {
-		return sc.RunContext.execJobContainer(sc.Cmd, sc.Env)(ctx)
+		return sc.RunContext.execJobContainer(sc.Cmd, sc.Cmdline, sc.Env)(ctx)
 	}
 }
 
@@ -231,10 +232,26 @@ func (sc *StepContext) setupShellCommand() common.Executor {
 		}
 		scCmd := step.ShellCommand()
 		scResolvedCmd := strings.Replace(scCmd, "{0}", containerPath, 1)
-		if step.Shell == "pwsh" || step.Shell == "powershell" {
-			sc.Cmd = strings.SplitN(scResolvedCmd, " ", 3)
-		} else {
-			sc.Cmd = strings.Fields(scResolvedCmd)
+		sc.Cmd = []string{}
+		expr, _ := regexp.Compile("\\s*(([^\\s\"]+|\"([^\\\\\"]|\\\\\"?)*\")+)")
+
+		escape2, _ := regexp.Compile("\\\\(\")")
+		escape, _ := regexp.Compile("([^\\s\"]*)(\"(([^\\\\\"]|\\\\\"?)*)\")?((.+|\n)*)")
+		if runtime.GOOS == "windows" {
+			// for example the cmd uses incompatible escaping rules, so args won't work
+			sc.Cmdline = scResolvedCmd
+		}
+		// It is important to handle quotes and quote escaping
+		for _, match := range expr.FindAllStringSubmatch(scResolvedCmd, -1) {
+			rawstr := match[1]
+			finalstr := ""
+			for len(rawstr) > 0 {
+				m := escape.FindStringSubmatch(rawstr)
+				finalstr += m[1]
+				finalstr += escape2.ReplaceAllString(m[3], "$1")
+				rawstr = m[5]
+			}
+			sc.Cmd = append(sc.Cmd, finalstr)
 		}
 
 		return rc.JobContainer.Copy(rc.GetActPath(), &container.FileEntry{
@@ -473,7 +490,7 @@ func (sc *StepContext) runAction(actionDir string, actionPath string, localActio
 			}
 			containerArgs := []string{"node", path.Join(containerActionDir, action.Runs.Main)}
 			log.Debugf("executing remote job container: %s", containerArgs)
-			return rc.execJobContainer(containerArgs, sc.Env)(ctx)
+			return rc.execJobContainer(containerArgs, "", sc.Env)(ctx)
 		case model.ActionRunsUsingDocker:
 			return sc.execAsDocker(ctx, action, actionName, containerActionDir, actionLocation, rc, step, localAction)
 		case model.ActionRunsUsingComposite:

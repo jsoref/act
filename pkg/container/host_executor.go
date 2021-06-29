@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"syscall"
 
 	"github.com/nektos/act/pkg/common"
 	"github.com/pkg/errors"
@@ -46,14 +47,14 @@ func (e *HostExecutor) CopyDir(destPath string, srcPath string, useGitIgnore boo
 				lnk, _ := os.Readlink(file)
 				relpath, _ := filepath.Rel(srcPath, file)
 				fdestpath := filepath.Join(destPath, relpath)
-				os.MkdirAll(filepath.Base(fdestpath), 0777)
+				os.MkdirAll(filepath.Dir(fdestpath), 0777)
 				os.Symlink(lnk, fdestpath)
 			} else if fi.Mode().IsRegular() {
 				relpath, _ := filepath.Rel(srcPath, file)
 				f, _ := os.Open(file)
 				defer f.Close()
 				fdestpath := filepath.Join(destPath, relpath)
-				os.MkdirAll(filepath.Base(fdestpath), 0777)
+				os.MkdirAll(filepath.Dir(fdestpath), 0777)
 				df, _ := os.OpenFile(fdestpath, os.O_CREATE|os.O_WRONLY, fi.Mode())
 				defer df.Close()
 				io.Copy(df, f)
@@ -103,7 +104,7 @@ func (e *HostExecutor) Start(attach bool) common.Executor {
 	}
 }
 
-func (e *HostExecutor) Exec(command []string, env map[string]string, user string) common.Executor {
+func (e *HostExecutor) Exec(command []string, cmdline string, env map[string]string, user string) common.Executor {
 	return func(ctx context.Context) error {
 		rawLogger := common.Logger(ctx).WithField("raw_output", true)
 		logWriter := common.NewLineWriter(func(s string) bool {
@@ -125,14 +126,20 @@ func (e *HostExecutor) Exec(command []string, env map[string]string, user string
 			f, _ = exec.LookPath(command[0])
 		}
 
+		attr := &syscall.SysProcAttr{}
+		if len(cmdline) > 0 {
+			attr.CmdLine = cmdline
+		}
+
 		cmd := &exec.Cmd{
-			Path:   f,
-			Args:   command,
-			Stdin:  nil,
-			Stdout: logWriter,
-			Env:    envList,
-			Stderr: logWriter,
-			Dir:    e.Path,
+			Path:        f,
+			Args:        command,
+			Stdin:       nil,
+			Stdout:      logWriter,
+			Env:         envList,
+			Stderr:      logWriter,
+			Dir:         e.Path,
+			SysProcAttr: attr,
 		}
 		return cmd.Run()
 	}

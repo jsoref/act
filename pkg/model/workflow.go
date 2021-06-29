@@ -3,6 +3,7 @@ package model
 import (
 	"fmt"
 	"io"
+	"os"
 	"reflect"
 	"regexp"
 	"strings"
@@ -318,7 +319,7 @@ func (s *Step) ShellCommand() string {
 	case "sh":
 		shellCommand = "sh -e -c {0}"
 	case "cmd":
-		shellCommand = "%ComSpec% /D /E:ON /V:OFF /S /C \"CALL \"{0}\"\""
+		shellCommand = os.ExpandEnv("${ComSpec} /D /E:ON /V:OFF /S /C \"CALL \"\"{0}\"\"\"")
 	case "powershell":
 		shellCommand = "powershell -command . '{0}'"
 	default:
