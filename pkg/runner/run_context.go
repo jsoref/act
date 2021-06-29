@@ -111,13 +111,15 @@ func (rc *RunContext) startJobContainer() common.Executor {
 	if image == "-self-hosted" {
 		return func(ctx context.Context) error {
 			cacheDir := rc.ActionCacheDir()
-			path := filepath.Join(cacheDir, uuid.New().String())
-			actPath := filepath.Join(path, "act")
+			miscpath := filepath.Join(cacheDir, uuid.New().String())
+			actPath := filepath.Join(miscpath, "act")
 			os.MkdirAll(actPath, 0777)
 			rc.SetActPath(actPath)
-			path = filepath.Join(path, "hostexecutor")
+			path := filepath.Join(miscpath, "hostexecutor")
 			os.MkdirAll(path, 0777)
-			rc.JobContainer = &container.HostExecutor{Path: path}
+			rc.JobContainer = &container.HostExecutor{Path: path, CleanUp: func() {
+				os.RemoveAll(miscpath)
+			}}
 			var copyWorkspace bool
 			var copyToPath string
 			if !rc.Config.BindWorkdir {

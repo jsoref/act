@@ -20,7 +20,8 @@ import (
 )
 
 type HostExecutor struct {
-	Path string
+	Path    string
+	CleanUp func()
 }
 
 func (e *HostExecutor) Create(capAdd []string, capDrop []string) common.Executor {
@@ -228,6 +229,9 @@ func (e *HostExecutor) UpdateFromPath(env *map[string]string) common.Executor {
 
 func (e *HostExecutor) Remove() common.Executor {
 	return func(ctx context.Context) error {
+		if e.CleanUp != nil {
+			e.CleanUp()
+		}
 		return os.RemoveAll(e.Path)
 	}
 }
