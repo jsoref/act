@@ -79,7 +79,7 @@ func (sc *StepContext) Executor() common.Executor {
 		remoteAction.URL = rc.Config.GitHubInstance
 
 		github := rc.getGithubContext()
-		if remoteAction.IsCheckout() && github.isLocalCheckout(step) {
+		if !rc.Config.ForceRemoteCheckout && remoteAction.IsCheckout() && github.isLocalCheckout(step) {
 			return func(ctx context.Context) error {
 				common.Logger(ctx).Debugf("Skipping local actions/checkout because workdir was already copied")
 				return nil
@@ -233,10 +233,10 @@ func (sc *StepContext) setupShellCommand() common.Executor {
 		scCmd := step.ShellCommand()
 		scResolvedCmd := strings.Replace(scCmd, "{0}", containerPath, 1)
 		sc.Cmd = []string{}
-		expr, _ := regexp.Compile("\\s*(([^\\s\"]+|\"([^\\\\\"]|\\\\\"?)*\")+)")
+		expr := regexp.MustCompile("\\s*(([^\\s\"]+|\"([^\\\\\"]|\\\\\"?)*\")+)")
 
-		escape2, _ := regexp.Compile("\\\\(\")")
-		escape, _ := regexp.Compile("([^\\s\"]*)(\"(([^\\\\\"]|\\\\\"?)*)\")?((.+|\n)*)")
+		escape2 := regexp.MustCompile("\\\\(\")")
+		escape := regexp.MustCompile("([^\\s\"]*)(\"(([^\\\\\"]|\\\\\"?)*)\")?((.+|\n)*)")
 		if runtime.GOOS == "windows" {
 			// for example the cmd uses incompatible escaping rules, so args won't work
 			sc.Cmdline = scResolvedCmd

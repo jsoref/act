@@ -113,10 +113,14 @@ func (rc *RunContext) startJobContainer() common.Executor {
 			cacheDir := rc.ActionCacheDir()
 			miscpath := filepath.Join(cacheDir, uuid.New().String())
 			actPath := filepath.Join(miscpath, "act")
-			os.MkdirAll(actPath, 0777)
+			if err := os.MkdirAll(actPath, 0777); err != nil {
+				return err
+			}
 			rc.SetActPath(actPath)
 			path := filepath.Join(miscpath, "hostexecutor")
-			os.MkdirAll(path, 0777)
+			if err := os.MkdirAll(path, 0777); err != nil {
+				return err
+			}
 			rc.JobContainer = &container.HostExecutor{Path: path, CleanUp: func() {
 				os.RemoveAll(miscpath)
 			}}
@@ -556,110 +560,115 @@ func (rc *RunContext) getGithubContext() *githubContext {
 		RunnerTrackingID: rc.Config.Env["RUNNER_TRACKING_ID"],
 	}
 	if rc.GithubContextBase != nil {
-		json.Unmarshal([]byte(*rc.GithubContextBase), ghc)
-	} else {
-		if ghc.RunID == "" {
-			ghc.RunID = "1"
-		}
-
-		if ghc.RunNumber == "" {
-			ghc.RunNumber = "1"
-		}
-
-		if ghc.RetentionDays == "" {
-			ghc.RetentionDays = "0"
-		}
-
-		if ghc.RunnerPerflog == "" {
-			ghc.RunnerPerflog = "/dev/null"
-		}
-
-		// Backwards compatibility for configs that require
-		// a default rather than being run as a cmd
-		if ghc.Actor == "" {
-			ghc.Actor = "nektos/act"
-		}
-
-		repoPath := rc.Config.Workdir
-		repo, err := common.FindGithubRepo(repoPath, rc.Config.GitHubInstance)
-		if err != nil {
-			log.Warningf("unable to get git repo: %v", err)
-		} else {
-			ghc.Repository = repo
-			if ghc.RepositoryOwner == "" {
-				ghc.RepositoryOwner = strings.Split(repo, "/")[0]
-			}
-		}
-
-		_, sha, err := common.FindGitRevision(repoPath)
-		if err != nil {
-			log.Warningf("unable to get git revision: %v", err)
-		} else {
-			ghc.Sha = sha
-		}
-
-		if rc.EventJSON != "" {
-			err = json.Unmarshal([]byte(rc.EventJSON), &ghc.Event)
-			if err != nil {
-				log.Errorf("Unable to Unmarshal event '%s': %v", rc.EventJSON, err)
-			}
-		}
-
-		maybeRef := nestedMapLookup(ghc.Event, ghc.EventName, "ref")
-		if maybeRef != nil {
-			log.Debugf("using github ref from event: %s", maybeRef)
-			ghc.Ref = maybeRef.(string)
-		} else {
-			ref, err := common.FindGitRef(repoPath)
-			if err != nil {
-				log.Warningf("unable to get git ref: %v", err)
-			} else {
-				log.Debugf("using github ref: %s", ref)
-				ghc.Ref = ref
-			}
-
-			// set the branch in the event data
-			if rc.Config.DefaultBranch != "" {
-				ghc.Event = withDefaultBranch(rc.Config.DefaultBranch, ghc.Event)
-			} else {
-				ghc.Event = withDefaultBranch("master", ghc.Event)
-			}
-		}
-
-		if ghc.EventName == "pull_request" {
-			ghc.BaseRef = asString(nestedMapLookup(ghc.Event, "pull_request", "base", "ref"))
-			ghc.HeadRef = asString(nestedMapLookup(ghc.Event, "pull_request", "head", "ref"))
+		err := json.Unmarshal([]byte(*rc.GithubContextBase), ghc)
+		if err == nil {
+			return ghc
 		}
 	}
+	ghc.applyDefaults(rc)
 
 	return ghc
 }
 
-func (ghc *githubContext) isLocalCheckout(step *model.Step) bool {
-	return false
-	// if step.Type() == model.StepTypeInvalid {
-	// 	// This will be errored out by the executor later, we need this here to avoid a null panic though
-	// 	return false
-	// }
-	// if step.Type() != model.StepTypeUsesActionRemote {
-	// 	return false
-	// }
-	// remoteAction := newRemoteAction(step.Uses)
-	// if remoteAction == nil {
-	// 	// IsCheckout() will nil panic if we dont bail out early
-	// 	return false
-	// }
-	// if !remoteAction.IsCheckout() {
-	// 	return false
-	// }
+func (ghc *githubContext) applyDefaults(rc *RunContext) {
+	if ghc.RunID == "" {
+		ghc.RunID = "1"
+	}
 
-	// if repository, ok := step.With["repository"]; ok && repository != ghc.Repository {
-	// 	return false
-	// }
-	// if repository, ok := step.With["ref"]; ok && repository != ghc.Ref {
-	// 	return false
-	// }
-	// return true
+	if ghc.RunNumber == "" {
+		ghc.RunNumber = "1"
+	}
+
+	if ghc.RetentionDays == "" {
+		ghc.RetentionDays = "0"
+	}
+
+	if ghc.RunnerPerflog == "" {
+		ghc.RunnerPerflog = "/dev/null"
+	}
+
+	// Backwards compatibility for configs that require
+	// a default rather than being run as a cmd
+	if ghc.Actor == "" {
+		ghc.Actor = "nektos/act"
+	}
+
+	repoPath := rc.Config.Workdir
+	repo, err := common.FindGithubRepo(repoPath, rc.Config.GitHubInstance)
+	if err != nil {
+		log.Warningf("unable to get git repo: %v", err)
+	} else {
+		ghc.Repository = repo
+		if ghc.RepositoryOwner == "" {
+			ghc.RepositoryOwner = strings.Split(repo, "/")[0]
+		}
+	}
+
+	_, sha, err := common.FindGitRevision(repoPath)
+	if err != nil {
+		log.Warningf("unable to get git revision: %v", err)
+	} else {
+		ghc.Sha = sha
+	}
+
+	if rc.EventJSON != "" {
+		err = json.Unmarshal([]byte(rc.EventJSON), &ghc.Event)
+		if err != nil {
+			log.Errorf("Unable to Unmarshal event '%s': %v", rc.EventJSON, err)
+		}
+	}
+
+	maybeRef := nestedMapLookup(ghc.Event, ghc.EventName, "ref")
+	if maybeRef != nil {
+		log.Debugf("using github ref from event: %s", maybeRef)
+		ghc.Ref = maybeRef.(string)
+	} else {
+		ref, err := common.FindGitRef(repoPath)
+		if err != nil {
+			log.Warningf("unable to get git ref: %v", err)
+		} else {
+			log.Debugf("using github ref: %s", ref)
+			ghc.Ref = ref
+		}
+
+		// set the branch in the event data
+		if rc.Config.DefaultBranch != "" {
+			ghc.Event = withDefaultBranch(rc.Config.DefaultBranch, ghc.Event)
+		} else {
+			ghc.Event = withDefaultBranch("master", ghc.Event)
+		}
+	}
+
+	if ghc.EventName == "pull_request" {
+		ghc.BaseRef = asString(nestedMapLookup(ghc.Event, "pull_request", "base", "ref"))
+		ghc.HeadRef = asString(nestedMapLookup(ghc.Event, "pull_request", "head", "ref"))
+	}
+}
+
+func (ghc *githubContext) isLocalCheckout(step *model.Step) bool {
+	if step.Type() == model.StepTypeInvalid {
+		// This will be errored out by the executor later, we need this here to avoid a null panic though
+		return false
+	}
+	if step.Type() != model.StepTypeUsesActionRemote {
+		return false
+	}
+	remoteAction := newRemoteAction(step.Uses)
+	if remoteAction == nil {
+		// IsCheckout() will nil panic if we dont bail out early
+		return false
+	}
+	if !remoteAction.IsCheckout() {
+		return false
+	}
+
+	if repository, ok := step.With["repository"]; ok && repository != ghc.Repository {
+		return false
+	}
+	if repository, ok := step.With["ref"]; ok && repository != ghc.Ref {
+		return false
+	}
+	return true
 }
 
 func asString(v interface{}) string {
@@ -770,6 +779,9 @@ func (rc *RunContext) withGithubEnv(env map[string]string) map[string]string {
 }
 
 func (rc *RunContext) localCheckoutPath() (string, bool) {
+	if rc.Config.ForceRemoteCheckout {
+		return "", false
+	}
 	ghContext := rc.getGithubContext()
 	for _, step := range rc.Run.Job().Steps {
 		if ghContext.isLocalCheckout(step) {
