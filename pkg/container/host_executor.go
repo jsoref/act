@@ -126,18 +126,27 @@ func (e *HostExecutor) Exec(command []string, cmdline string, env map[string]str
 		}
 
 		attr := getSysProcAttr(cmdline)
-
-		cmd := &exec.Cmd{
-			Path:        f,
-			Args:        command,
-			Stdin:       nil,
-			Stdout:      logWriter,
-			Env:         envList,
-			Stderr:      logWriter,
-			Dir:         e.Path,
-			SysProcAttr: attr,
+		if len(f) == 0 {
+			err := "Cannot find: " + fmt.Sprint(command[0]) + " in PATH"
+			logWriter.Write([]byte(err))
+			return errors.New(err)
+		} else {
+			cmd := &exec.Cmd{
+				Path:        f,
+				Args:        command,
+				Stdin:       nil,
+				Stdout:      logWriter,
+				Env:         envList,
+				Stderr:      logWriter,
+				Dir:         e.Path,
+				SysProcAttr: attr,
+			}
+			err := cmd.Run()
+			if err != nil {
+				logWriter.Write([]byte(err.Error()))
+			}
+			return err
 		}
-		return cmd.Run()
 	}
 }
 
