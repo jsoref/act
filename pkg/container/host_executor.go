@@ -14,7 +14,6 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
-	"syscall"
 
 	"github.com/nektos/act/pkg/common"
 	"github.com/pkg/errors"
@@ -126,10 +125,7 @@ func (e *HostExecutor) Exec(command []string, cmdline string, env map[string]str
 			f, _ = exec.LookPath(command[0])
 		}
 
-		attr := &syscall.SysProcAttr{}
-		if len(cmdline) > 0 {
-			attr.CmdLine = cmdline
-		}
+		attr := getSysProcAttr(cmdline)
 
 		cmd := &exec.Cmd{
 			Path:        f,
