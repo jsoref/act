@@ -242,7 +242,11 @@ func TestContainerPath(t *testing.T) {
 				Workdir: v.sourcePath,
 			}
 
-			assert.Equal(t, v.destinationPath, runnerConfig.containerPath(runnerConfig.Workdir))
+			rc := &RunContext{
+				Config: runnerConfig,
+			}
+
+			assert.Equal(t, v.destinationPath, rc.containerPath(runnerConfig.Workdir))
 		}
 
 		if err := os.Chdir(cwd); err != nil {
@@ -261,8 +265,10 @@ func TestContainerPath(t *testing.T) {
 			runnerConfig := &Config{
 				Workdir: v.sourcePath,
 			}
-
-			assert.Equal(t, v.destinationPath, runnerConfig.containerPath(runnerConfig.Workdir))
+			rc := &RunContext{
+				Config: runnerConfig,
+			}
+			assert.Equal(t, v.destinationPath, rc.containerPath(runnerConfig.Workdir))
 		}
 	}
 }

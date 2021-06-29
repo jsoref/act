@@ -44,14 +44,13 @@ type Config struct {
 	ContainerCapDrop      []string          // list of kernel capabilities to remove from the containers
 	AutoRemove            bool              // controls if the container is automatically removed upon workflow completion
 	ForceRemoteCheckout   bool
-	Local                 bool
 }
 
 // Resolves the equivalent host path inside the container
 // This is required for windows and WSL 2 to translate things like C:\Users\Myproject to /mnt/users/Myproject
 // For use in docker volumes and binds
-func (config *Config) containerPath(path string) string {
-	if config.Local {
+func (rc *RunContext) containerPath(path string) string {
+	if rc.Local {
 		return path
 	}
 	if runtime.GOOS == "windows" && strings.Contains(path, "/") {
@@ -86,8 +85,8 @@ func (config *Config) containerPath(path string) string {
 
 // Resolves the equivalent host path inside the container
 // This is required for windows and WSL 2 to translate things like C:\Users\Myproject to /mnt/users/Myproject
-func (config *Config) ContainerWorkdir() string {
-	return config.containerPath(config.Workdir)
+func (rc *RunContext) ContainerWorkdir() string {
+	return rc.containerPath(rc.Config.Workdir)
 }
 
 type runnerImpl struct {

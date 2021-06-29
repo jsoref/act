@@ -37,6 +37,7 @@ type RunContext struct {
 	OutputMappings    map[MappableOutput]MappableOutput
 	JobName           string
 	actPath           string
+	Local             bool
 }
 
 func (rc *RunContext) InitStepResults(keys []string) {
@@ -105,9 +106,9 @@ func (rc *RunContext) GetBindsAndMounts() ([]string, map[string]string) {
 		if runtime.GOOS == "darwin" {
 			bindModifiers = ":delegated"
 		}
-		binds = append(binds, fmt.Sprintf("%s:%s%s", rc.Config.Workdir, rc.Config.ContainerWorkdir(), bindModifiers))
+		binds = append(binds, fmt.Sprintf("%s:%s%s", rc.Config.Workdir, rc.ContainerWorkdir(), bindModifiers))
 	} else {
-		mounts[name] = rc.Config.ContainerWorkdir()
+		mounts[name] = rc.ContainerWorkdir()
 	}
 
 	return binds, mounts
@@ -138,7 +139,7 @@ func (rc *RunContext) startJobContainer() common.Executor {
 				copyToPath = filepath.Join(path, copyToPath)
 			}
 			// Tell act to not change the filepath on windows
-			rc.Config.Local = true
+			rc.Local = true
 
 			return common.NewPipelineExecutor(
 				rc.JobContainer.CopyDir(copyToPath, rc.Config.Workdir+string(filepath.Separator)+".", rc.Config.UseGitIgnore).IfBool(copyWorkspace),
@@ -183,7 +184,7 @@ func (rc *RunContext) startJobContainer() common.Executor {
 		rc.JobContainer = container.NewContainer(&container.NewContainerInput{
 			Cmd:         nil,
 			Entrypoint:  []string{"/usr/bin/tail", "-f", "/dev/null"},
-			WorkingDir:  rc.Config.ContainerWorkdir(),
+			WorkingDir:  rc.ContainerWorkdir(),
 			Image:       image,
 			Username:    rc.Config.Secrets["DOCKER_USERNAME"],
 			Password:    rc.Config.Secrets["DOCKER_PASSWORD"],
@@ -203,7 +204,7 @@ func (rc *RunContext) startJobContainer() common.Executor {
 		var copyToPath string
 		if !rc.Config.BindWorkdir {
 			copyToPath, copyWorkspace = rc.localCheckoutPath()
-			copyToPath = filepath.Join(rc.Config.ContainerWorkdir(), copyToPath)
+			copyToPath = filepath.Join(rc.ContainerWorkdir(), copyToPath)
 		}
 
 		return common.NewPipelineExecutor(
@@ -557,7 +558,7 @@ func (rc *RunContext) getGithubContext() *githubContext {
 		RunNumber:        rc.Config.Env["GITHUB_RUN_NUMBER"],
 		Actor:            rc.Config.Actor,
 		EventName:        rc.Config.EventName,
-		Workspace:        rc.Config.ContainerWorkdir(),
+		Workspace:        rc.ContainerWorkdir(),
 		Action:           rc.CurrentStep,
 		Token:            rc.Config.Secrets["GITHUB_TOKEN"],
 		ActionPath:       rc.Config.Env["GITHUB_ACTION_PATH"],
@@ -574,12 +575,10 @@ func (rc *RunContext) getGithubContext() *githubContext {
 			return ghc
 		}
 	}
-	ghc.applyDefaults(rc)
-
-	return ghc
+	return ghc.applyDefaults(rc)
 }
 
-func (ghc *githubContext) applyDefaults(rc *RunContext) {
+func (ghc *githubContext) applyDefaults(rc *RunContext) *githubContext {
 	if ghc.RunID == "" {
 		ghc.RunID = "1"
 	}
@@ -652,6 +651,8 @@ func (ghc *githubContext) applyDefaults(rc *RunContext) {
 		ghc.BaseRef = asString(nestedMapLookup(ghc.Event, "pull_request", "base", "ref"))
 		ghc.HeadRef = asString(nestedMapLookup(ghc.Event, "pull_request", "head", "ref"))
 	}
+
+	return ghc
 }
 
 func (ghc *githubContext) isLocalCheckout(step *model.Step) bool {
