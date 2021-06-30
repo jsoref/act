@@ -128,7 +128,7 @@ func (e *HostExecutor) Exec(command []string, cmdline string, env map[string]str
 
 		attr := getSysProcAttr(cmdline)
 		if len(f) == 0 {
-			err := "Cannot find: " + fmt.Sprint(command[0]) + " in PATH"
+			err := "Cannot find: " + fmt.Sprint(command[0]) + " in PATH\n"
 			logWriter.Write([]byte(err))
 			return errors.New(err)
 		} else {
@@ -144,7 +144,7 @@ func (e *HostExecutor) Exec(command []string, cmdline string, env map[string]str
 			}
 			err := cmd.Run()
 			if err != nil {
-				logWriter.Write([]byte(err.Error()))
+				logWriter.Write([]byte(err.Error() + "\n"))
 			}
 			return err
 		}
