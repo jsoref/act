@@ -199,6 +199,13 @@ func (sc *StepContext) setupShellCommand() common.Executor {
 		}
 		scriptName := fmt.Sprintf("workflow/%s", step.ID)
 
+		if step.Shell == "" {
+			step.Shell = rc.Run.Job().Defaults.Run.Shell
+		}
+		if step.Shell == "" {
+			step.Shell = rc.Run.Workflow.Defaults.Run.Shell
+		}
+
 		// Reference: https://github.com/actions/runner/blob/8109c962f09d9acc473d92c595ff43afceddb347/src/Runner.Worker/Handlers/ScriptHandlerHelpers.cs#L47-L64
 		// Reference: https://github.com/actions/runner/blob/8109c962f09d9acc473d92c595ff43afceddb347/src/Runner.Worker/Handlers/ScriptHandlerHelpers.cs#L19-L27
 		runPrepend := ""
@@ -224,12 +231,6 @@ func (sc *StepContext) setupShellCommand() common.Executor {
 		log.Debugf("Wrote command '%s' to '%s'", run, scriptName)
 		containerPath := path.Join(rc.GetActPath(), scriptName)
 
-		if step.Shell == "" {
-			step.Shell = rc.Run.Job().Defaults.Run.Shell
-		}
-		if step.Shell == "" {
-			step.Shell = rc.Run.Workflow.Defaults.Run.Shell
-		}
 		scCmd := step.ShellCommand()
 		scResolvedCmd := strings.Replace(scCmd, "{0}", containerPath, 1)
 		sc.Cmd = []string{}
@@ -257,7 +258,7 @@ func (sc *StepContext) setupShellCommand() common.Executor {
 		return rc.JobContainer.Copy(rc.GetActPath(), &container.FileEntry{
 			Name: scriptName,
 			Mode: 0755,
-			Body: script.String(),
+			Body: runPrepend + "\n" + script.String() + "\n" + runAppend,
 		})(ctx)
 	}
 }
