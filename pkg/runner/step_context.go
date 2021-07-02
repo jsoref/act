@@ -33,11 +33,25 @@ type StepContext struct {
 	Cmd        []string
 	Cmdline    string
 	Action     *model.Action
+	Needs      *model.Job
 }
 
 func (sc *StepContext) execJobContainer() common.Executor {
 	return func(ctx context.Context) error {
 		return sc.RunContext.execJobContainer(sc.Cmd, sc.Cmdline, sc.Env)(ctx)
+	}
+}
+
+func (sc *StepContext) interpolateOutputs() common.Executor {
+	return func(ctx context.Context) error {
+		ee := sc.NewExpressionEvaluator()
+		for k, v := range sc.RunContext.Run.Job().Outputs {
+			interpolated := ee.Interpolate(v)
+			if v != interpolated {
+				sc.RunContext.Run.Job().Outputs[k] = interpolated
+			}
+		}
+		return nil
 	}
 }
 
