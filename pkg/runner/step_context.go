@@ -129,15 +129,23 @@ func (sc *StepContext) mergeEnv() map[string]string {
 		env = mergeMaps(rc.GetEnv(), step.GetEnv())
 	}
 
-	if env["PATH"] == "" && runtime.GOOS != "linux" {
-		env["PATH"], _ = os.LookupEnv("PATH")
-	} else {
-		env["PATH"] = `/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`
+	_, isHost := rc.JobContainer.(*container.HostExecutor)
+	if env["PATH"] == "" {
+		if isHost && runtime.GOOS != "linux" {
+			env["PATH"], _ = os.LookupEnv("PATH")
+		} else {
+			env["PATH"] = `/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`
+		}
 	}
+
 	if rc.ExtraPath != nil && len(rc.ExtraPath) > 0 {
 		p := env["PATH"]
-		env["PATH"] = strings.Join(rc.ExtraPath, string(filepath.ListSeparator))
-		env["PATH"] += string(filepath.ListSeparator) + p
+		listsep := ":"
+		if isHost {
+			listsep = string(filepath.ListSeparator)
+		}
+		env["PATH"] = strings.Join(rc.ExtraPath, listsep)
+		env["PATH"] += listsep + p
 	}
 
 	sc.Env = rc.withGithubEnv(env)
