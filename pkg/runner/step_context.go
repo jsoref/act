@@ -346,6 +346,9 @@ func (sc *StepContext) runUsesContainer() common.Executor {
 		}
 		entrypoint := strings.Fields(step.With["entrypoint"])
 		stepContainer := sc.newStepContainer(ctx, image, cmd, entrypoint)
+		if stepContainer == nil {
+			return errors.New("Failed to create step container")
+		}
 
 		return common.NewPipelineExecutor(
 			stepContainer.Pull(rc.Config.ForcePull),
@@ -592,6 +595,9 @@ func (sc *StepContext) execAsDocker(ctx context.Context, action *model.Action, a
 		entrypoint = action.Runs.Entrypoint
 	}
 	stepContainer := sc.newStepContainer(ctx, image, cmd, entrypoint)
+	if stepContainer == nil {
+		return errors.New("Failed to create step container")
+	}
 	return common.NewPipelineExecutor(
 		prepImage,
 		stepContainer.Pull(rc.Config.ForcePull),
