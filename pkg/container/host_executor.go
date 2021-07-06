@@ -64,10 +64,16 @@ func (e *HostExecutor) CopyDir(destPath string, srcPath string, useGitIgnore boo
 	}
 }
 
-func (e *HostExecutor) GetContainerArchive(ctx context.Context, srcPath string) (io.ReadCloser, error) {
+func (e *HostExecutor) GetContainerArchive(ctx context.Context, srcPath string) (rc io.ReadCloser, err error) {
 	buf := &bytes.Buffer{}
 	tw := tar.NewWriter(buf)
-	filepath.Walk(srcPath, func(file string, fi os.FileInfo, err error) error {
+	defer func() {
+		if err == nil {
+			err = tw.Close()
+		}
+	}()
+	srcPath = filepath.Clean(srcPath)
+	filecbk := func(file string, fi os.FileInfo, err error) error {
 		if fi.Mode()&os.ModeSymlink != 0 {
 			lnk, _ := os.Readlink(file)
 			fih, _ := tar.FileInfoHeader(fi, lnk)
@@ -83,12 +89,28 @@ func (e *HostExecutor) GetContainerArchive(ctx context.Context, srcPath string) 
 				fih.Name = strings.ReplaceAll(fih.Name, string(filepath.Separator), "/")
 			}
 			tw.WriteHeader(fih)
-			f, _ := os.Open(file)
+			f, err := os.Open(file)
+			if err != nil {
+				return err
+			}
 			defer f.Close()
 			io.Copy(tw, f)
 		}
 		return nil
-	})
+	}
+	fi, err := os.Lstat(srcPath)
+	if err != nil {
+		return nil, err
+	}
+	if fi.IsDir() {
+		filepath.Walk(srcPath, filecbk)
+	} else {
+		file := srcPath
+		srcPath = filepath.Dir(srcPath)
+		if err := filecbk(file, fi, nil); err != nil {
+			return nil, err
+		}
+	}
 	return io.NopCloser(buf), nil
 }
 
