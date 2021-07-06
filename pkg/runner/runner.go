@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/nektos/act/pkg/common"
+	"github.com/nektos/act/pkg/container"
 	"github.com/nektos/act/pkg/model"
 	log "github.com/sirupsen/logrus"
 )
@@ -51,6 +52,13 @@ type Config struct {
 // For use in docker volumes and binds
 func (rc *RunContext) containerPath(path string) string {
 	if rc.Local {
+		if he, ok := rc.JobContainer.(*container.HostExecutor); ok {
+			if bp, err := filepath.Rel(rc.Config.Workdir, path); err != nil {
+				return filepath.Join(he.Path, bp)
+			} else if filepath.Clean(rc.Config.Workdir) == filepath.Clean(path) {
+				return he.Path
+			}
+		}
 		return path
 	}
 	if runtime.GOOS == "windows" && strings.Contains(path, "/") {
