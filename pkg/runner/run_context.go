@@ -245,8 +245,10 @@ func (rc *RunContext) execJobContainer(cmd []string, cmdline string, env map[str
 func (rc *RunContext) stopJobContainer() common.Executor {
 	return func(ctx context.Context) error {
 		if rc.JobContainer != nil && !rc.Config.ReuseContainers {
-			return rc.JobContainer.Remove().
-				Then(container.NewDockerVolumeRemoveExecutor(rc.jobContainerName(), false))(ctx)
+			return rc.JobContainer.Remove().Then(container.NewDockerVolumeRemoveExecutor(rc.jobContainerName(), false).If(func(ctx context.Context) bool {
+				_, isHost := rc.JobContainer.(*container.HostExecutor)
+				return !isHost
+			}))(ctx)
 		}
 		return nil
 	}
