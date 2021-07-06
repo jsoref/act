@@ -200,6 +200,10 @@ func (rc *RunContext) startJobContainer() common.Executor {
 			Platform:    rc.Config.ContainerArchitecture,
 		})
 
+		if rc.JobContainer == nil {
+			return errors.New("Failed to create Container")
+		}
+
 		var copyWorkspace bool
 		var copyToPath string
 		if !rc.Config.BindWorkdir {
