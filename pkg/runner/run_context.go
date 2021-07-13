@@ -118,6 +118,15 @@ func (rc *RunContext) startJobContainer() common.Executor {
 	image := rc.platformImage()
 	if image == "-self-hosted" {
 		return func(ctx context.Context) error {
+			rawLogger := common.Logger(ctx).WithField("raw_output", true)
+			logWriter := common.NewLineWriter(rc.commandHandler(ctx), func(s string) bool {
+				if rc.Config.LogOutput {
+					rawLogger.Infof("%s", s)
+				} else {
+					rawLogger.Debugf("%s", s)
+				}
+				return true
+			})
 			cacheDir := rc.ActionCacheDir()
 			miscpath := filepath.Join(cacheDir, uuid.New().String())
 			actPath := filepath.Join(miscpath, "act")
@@ -131,7 +140,7 @@ func (rc *RunContext) startJobContainer() common.Executor {
 			}
 			rc.JobContainer = &container.HostExecutor{Path: path, CleanUp: func() {
 				os.RemoveAll(miscpath)
-			}}
+			}, StdOut: logWriter}
 			var copyWorkspace bool
 			var copyToPath string
 			if !rc.Config.BindWorkdir {

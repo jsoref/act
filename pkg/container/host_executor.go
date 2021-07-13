@@ -22,6 +22,7 @@ import (
 type HostExecutor struct {
 	Path    string
 	CleanUp func()
+	StdOut  io.Writer
 }
 
 func (e *HostExecutor) Create(capAdd []string, capDrop []string) common.Executor {
@@ -128,11 +129,6 @@ func (e *HostExecutor) Start(attach bool) common.Executor {
 
 func (e *HostExecutor) Exec(command []string, cmdline string, env map[string]string, user string) common.Executor {
 	return func(ctx context.Context) error {
-		rawLogger := common.Logger(ctx).WithField("raw_output", true)
-		logWriter := common.NewLineWriter(func(s string) bool {
-			rawLogger.Infof("%s", s)
-			return true
-		})
 		envList := make([]string, 0)
 		if runtime.GOOS == "windows" && env["PATHEXT"] == "" {
 			env["PATHEXT"] = ".COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC;.CPL"
@@ -151,22 +147,22 @@ func (e *HostExecutor) Exec(command []string, cmdline string, env map[string]str
 		attr := getSysProcAttr(cmdline)
 		if len(f) == 0 {
 			err := "Cannot find: " + fmt.Sprint(command[0]) + " in PATH\n"
-			logWriter.Write([]byte(err))
+			e.StdOut.Write([]byte(err))
 			return errors.New(err)
 		} else {
 			cmd := &exec.Cmd{
 				Path:        f,
 				Args:        command,
 				Stdin:       nil,
-				Stdout:      logWriter,
+				Stdout:      e.StdOut,
 				Env:         envList,
-				Stderr:      logWriter,
+				Stderr:      e.StdOut,
 				Dir:         e.Path,
 				SysProcAttr: attr,
 			}
 			err := cmd.Run()
 			if err != nil {
-				logWriter.Write([]byte(err.Error() + "\n"))
+				e.StdOut.Write([]byte(err.Error() + "\n"))
 			}
 			return err
 		}
