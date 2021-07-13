@@ -149,6 +149,15 @@ func (rc *RunContext) startJobContainer() common.Executor {
 			}
 			// Tell act to not change the filepath on windows
 			rc.Local = true
+			rc.Env["RUNNER_TOOL_CACHE"] = filepath.Join(rc.GetActPath(), "tool_cache")
+			rc.Env["RUNNER_OS"] = runtime.GOOS
+			rc.Env["RUNNER_TEMP"] = os.TempDir()
+			for _, env := range os.Environ() {
+				i := strings.Index(env, "=")
+				if i > 0 {
+					rc.Env[env[0:i]] = env[i+1:]
+				}
+			}
 
 			return common.NewPipelineExecutor(
 				rc.JobContainer.CopyDir(copyToPath, rc.Config.Workdir+string(filepath.Separator)+".", rc.Config.UseGitIgnore).IfBool(copyWorkspace),
