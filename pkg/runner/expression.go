@@ -18,7 +18,7 @@ import (
 var expressionPattern, operatorPattern *regexp.Regexp
 
 func init() {
-	expressionPattern = regexp.MustCompile(`\${{\s*(.+?)\s*}}`)
+	expressionPattern = regexp.MustCompile(`\${{\s*([.\n]+?)\s*}}`)
 	operatorPattern = regexp.MustCompile("^[!=><|&]+$")
 }
 
@@ -61,6 +61,16 @@ type expressionEvaluator struct {
 func (ee *expressionEvaluator) Evaluate(in string) (string, bool, error) {
 	if strings.HasPrefix(in, `secrets.`) {
 		in = `secrets.` + strings.ToUpper(strings.SplitN(in, `.`, 2)[1])
+	}
+	expr := regexp.MustCompile(`([^']*'[^'\n]*(''[^'\n]*)*)\n`)
+	old := ""
+	for old != in {
+		old = in
+		in = expr.ReplaceAllString(in, "$1\\n")
+	}
+	secretexpr := regexp.MustCompile(`((([^']*'[^']*(''[^']*)*)')*)[^']*secrets.([A-Za-z_-]+)`)
+	for _, match := range secretexpr.FindAllStringSubmatchIndex(in, -1) {
+		in = in[0:match[10]] + strings.ToUpper(in[match[10]:match[11]]) + in[match[11]:]
 	}
 	re := ee.Rewrite(in)
 	if re != in {

@@ -110,6 +110,9 @@ func TestEvaluate(t *testing.T) {
 		{"env.key", "value", ""},
 		{"secrets.CASE_INSENSITIVE_SECRET", "value", ""},
 		{"secrets.case_insensitive_secret", "value", ""},
+		{"format('{0}\n{0}', secrets.case_insensitive_secret)", "value\nvalue", ""},
+		{"format('secrets.case_insensitive_secret {0}\n{0}', secrets.case_insensitive_secret)", "secrets.case_insensitive_secret value\nvalue", ""},
+		{"format('''secrets.case_insensitive_secret {0}\n{0}', secrets.case_insensitive_secret)", "'secrets.case_insensitive_secret value\nvalue", ""},
 	}
 
 	for _, table := range tables {
