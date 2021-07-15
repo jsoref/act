@@ -312,15 +312,15 @@ func (s *Step) ShellCommand() string {
 	//Reference: https://github.com/actions/runner/blob/8109c962f09d9acc473d92c595ff43afceddb347/src/Runner.Worker/Handlers/ScriptHandlerHelpers.cs#L9-L17
 	switch s.Shell {
 	case "", "bash":
-		shellCommand = "bash --noprofile --norc -e -o pipefail {0}"
+		shellCommand = "bash --noprofile --norc -e -o pipefail \"{0}\""
 	case "pwsh":
 		shellCommand = "pwsh -command . '{0}'"
 	case "python":
-		shellCommand = "python {0}"
+		shellCommand = "python \"{0}\""
 	case "sh":
-		shellCommand = "sh -e -c {0}"
+		shellCommand = "sh -e -c \"{0}\""
 	case "cmd":
-		shellCommand = os.ExpandEnv("${ComSpec} /D /E:ON /V:OFF /S /C \"CALL \"\"{0}\"\"\"")
+		shellCommand = os.ExpandEnv("${ComSpec} /D /E:ON /V:OFF /S /C \"CALL \"{0}\"\"")
 	case "powershell":
 		shellCommand = "powershell -command . '{0}'"
 	default:
