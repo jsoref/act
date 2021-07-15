@@ -278,6 +278,8 @@ func vmFormat(vm *otto.Otto) {
 		for i, v := range vals {
 			s = strings.ReplaceAll(s, fmt.Sprintf("{%d}", i), v)
 		}
+		s = strings.ReplaceAll(s, "{{", "{")
+		s = strings.ReplaceAll(s, "}}", "}")
 		return s
 	})
 }
