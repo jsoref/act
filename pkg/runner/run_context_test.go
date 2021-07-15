@@ -3,7 +3,6 @@ package runner
 import (
 	"fmt"
 	"os"
-	"regexp"
 	"runtime"
 	"sort"
 	"strings"
@@ -186,8 +185,6 @@ jobs:
 		if table.wantErr || strings.HasPrefix(table.in, "github.actor") {
 			continue
 		}
-		expressionPattern = regexp.MustCompile(`\${{\s*(.+?)\s*}}`)
-
 		expr := expressionPattern.ReplaceAllStringFunc(table.in, func(match string) string {
 			return fmt.Sprintf("€{{ %s }}", expressionPattern.ReplaceAllString(match, "$1"))
 		})

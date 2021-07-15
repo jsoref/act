@@ -18,7 +18,7 @@ import (
 var expressionPattern, operatorPattern *regexp.Regexp
 
 func init() {
-	expressionPattern = regexp.MustCompile(`\${{\s*([.\n]+?)\s*}}`)
+	expressionPattern = regexp.MustCompile(`\$\{\{(([^\}'\n]+|'([^']|\n)*'|\n)*)\}\}`)
 	operatorPattern = regexp.MustCompile("^[!=><|&]+$")
 }
 
@@ -59,9 +59,6 @@ type expressionEvaluator struct {
 }
 
 func (ee *expressionEvaluator) Evaluate(in string) (string, bool, error) {
-	if strings.HasPrefix(in, `secrets.`) {
-		in = `secrets.` + strings.ToUpper(strings.SplitN(in, `.`, 2)[1])
-	}
 	expr := regexp.MustCompile(`([^']*'[^'\n]*(''[^'\n]*)*)\n`)
 	old := ""
 	for old != in {
@@ -102,6 +99,7 @@ func (ee *expressionEvaluator) InterpolateWithStringCheck(in string) (string, bo
 
 	out := in
 	isString := false
+
 	for {
 		out = expressionPattern.ReplaceAllStringFunc(in, func(match string) string {
 			// Extract and trim the actual expression inside ${{...}} delimiters

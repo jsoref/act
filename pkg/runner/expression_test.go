@@ -3,7 +3,6 @@ package runner
 import (
 	"fmt"
 	"os"
-	"regexp"
 	"sort"
 	"testing"
 
@@ -185,6 +184,10 @@ func TestInterpolate(t *testing.T) {
 		{"${{ env.SOMETHING_TRUE || false }}", "true"},
 		{"${{ env.SOMETHING_FALSE || false }}", "false"},
 		{"${{ env.SOMETHING_FALSE }} && ${{ env.SOMETHING_TRUE }}", "false && true"},
+		{"echo '${{inputs.test}}'", "echo ''"},
+		{"${{format('{0}\n{0}', secrets.case_insensitive_secret)}}", "value\nvalue"},
+		{"${{format('secrets.case_insensitive_secret {0}\n{0}', secrets.case_insensitive_secret)}}", "secrets.case_insensitive_secret value\nvalue"},
+		{"${{format('''secrets.case_insensitive_secret {0}\n{0}', secrets.case_insensitive_secret)}}", "'secrets.case_insensitive_secret value\nvalue"},
 	}
 
 	updateTestExpressionWorkflow(t, tables, rc)
@@ -225,8 +228,6 @@ jobs:
     steps:
 `, envs)
 	for _, table := range tables {
-		expressionPattern = regexp.MustCompile(`\${{\s*(.+?)\s*}}`)
-
 		expr := expressionPattern.ReplaceAllStringFunc(table.in, func(match string) string {
 			return fmt.Sprintf("€{{ %s }}", expressionPattern.ReplaceAllString(match, "$1"))
 		})
