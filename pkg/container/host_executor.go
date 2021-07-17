@@ -150,18 +150,22 @@ func (e *HostExecutor) Exec(command []string, cmdline string, env map[string]str
 			e.StdOut.Write([]byte(err))
 			return errors.New(err)
 		} else {
-			cmd := &exec.Cmd{
-				Path:        f,
-				Args:        command,
-				Stdin:       nil,
-				Stdout:      e.StdOut,
-				Env:         envList,
-				Stderr:      e.StdOut,
-				Dir:         e.Path,
-				SysProcAttr: attr,
-			}
+			cmd := exec.CommandContext(ctx, f)
+			cmd.Path = f
+			cmd.Args = command
+			cmd.Stdin = nil
+			cmd.Stdout = e.StdOut
+			cmd.Env = envList
+			cmd.Stderr = e.StdOut
+			cmd.Dir = e.Path
+			cmd.SysProcAttr = attr
 			err := cmd.Run()
 			if err != nil {
+				select {
+				case <-ctx.Done():
+					e.StdOut.Write([]byte("This step was cancelled\n"))
+				default:
+				}
 				e.StdOut.Write([]byte(err.Error() + "\n"))
 			}
 			return err
