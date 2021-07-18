@@ -59,12 +59,13 @@ type expressionEvaluator struct {
 }
 
 func (ee *expressionEvaluator) Evaluate(in string) (string, bool, error) {
-	expr := regexp.MustCompile(`([^']*'[^'\n]*(''[^'\n]*)*)\n`)
-	old := ""
-	for old != in {
-		old = in
-		in = expr.ReplaceAllString(in, "$1\\n")
-	}
+	expr := regexp.MustCompile(`'[^']*'`)
+	in = expr.ReplaceAllStringFunc(in, func(s string) string {
+		s = strings.ReplaceAll(s, "\\", "\\\\")
+		s = strings.ReplaceAll(s, "\r", "\\r")
+		s = strings.ReplaceAll(s, "\n", "\\n")
+		return s
+	})
 	secretexpr := regexp.MustCompile(`((([^']*'[^']*(''[^']*)*)')*)[^']*secrets.([A-Za-z_-]+)`)
 	for _, match := range secretexpr.FindAllStringSubmatchIndex(in, -1) {
 		in = in[0:match[10]] + strings.ToUpper(in[match[10]:match[11]]) + in[match[11]:]
