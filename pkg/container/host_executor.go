@@ -15,7 +15,6 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/creack/pty"
 	"github.com/nektos/act/pkg/common"
 	"github.com/pkg/errors"
 )
@@ -160,40 +159,40 @@ func (e *HostExecutor) Exec(command []string, cmdline string, env map[string]str
 			cmd.Dir = e.Path
 			cmd.SysProcAttr = getSysProcAttr(cmdline, false)
 			var err error
-			ttyctx, finishTty := context.WithCancel(context.Background())
-			var ppty *os.File
+			// ttyctx, finishTty := context.WithCancel(context.Background())
+			// var ppty *os.File
 			{
-				var tty *os.File
-				defer func() {
-					if tty != nil {
-						tty.Close()
-					}
-				}()
-				if containerAllocateTerminal {
-					var err error
-					ppty, tty, err = pty.Open()
-					if err != nil {
-						finishTty()
-					} else {
-						cmd.Stdin = tty
-						cmd.Stdout = tty
-						cmd.Stderr = tty
-						cmd.SysProcAttr = getSysProcAttr(cmdline, true)
-						go func() {
-							defer finishTty()
-							io.Copy(e.StdOut, ppty)
-						}()
-					}
-				} else {
-					finishTty()
-				}
+				// var tty *os.File
+				// defer func() {
+				// 	if tty != nil {
+				// 		tty.Close()
+				// 	}
+				// }()
+				// if containerAllocateTerminal {
+				// 	var err error
+				// 	ppty, tty, err = pty.Open()
+				// 	if err != nil {
+				// 		finishTty()
+				// 	} else {
+				// 		cmd.Stdin = tty
+				// 		cmd.Stdout = tty
+				// 		cmd.Stderr = tty
+				// 		cmd.SysProcAttr = getSysProcAttr(cmdline, true)
+				// 		go func() {
+				// 			defer finishTty()
+				// 			io.Copy(e.StdOut, ppty)
+				// 		}()
+				// 	}
+				// } else {
+				// 	finishTty()
+				// }
 				err = cmd.Start()
 			}
 			if err == nil {
 				err = cmd.Wait()
 			}
-			ppty.Close()
-			<-ttyctx.Done()
+			// ppty.Close()
+			// <-ttyctx.Done()
 			if err != nil {
 				select {
 				case <-ctx.Done():
