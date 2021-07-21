@@ -5,7 +5,9 @@ package container
 import (
 	"context"
 	"io"
+	"os"
 
+	"golang.org/x/term"
 	"github.com/nektos/act/pkg/common"
 )
 
