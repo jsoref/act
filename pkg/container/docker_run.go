@@ -56,6 +56,16 @@ type NewContainerInput struct {
 	Platform    string
 }
 
+var containerAllocateTerminal bool
+
+func init() {
+	containerAllocateTerminal = term.IsTerminal(int(os.Stdout.Fd()))
+}
+
+func SetContainerAllocateTerminal(val bool) {
+	containerAllocateTerminal = val
+}
+
 // FileEntry is a file to copy to a container
 type FileEntry struct {
 	Name string
@@ -288,7 +298,6 @@ func (cr *containerReference) create(capAdd []string, capDrop []string) common.E
 			return nil
 		}
 		logger := common.Logger(ctx)
-		isTerminal := term.IsTerminal(int(os.Stdout.Fd()))
 
 		input := cr.input
 		config := &container.Config{
@@ -297,7 +306,7 @@ func (cr *containerReference) create(capAdd []string, capDrop []string) common.E
 			Entrypoint: input.Entrypoint,
 			WorkingDir: input.WorkingDir,
 			Env:        input.Env,
-			Tty:        isTerminal,
+			Tty:        containerAllocateTerminal,
 		}
 
 		mounts := make([]mount.Mount, 0)
@@ -435,7 +444,6 @@ func (cr *containerReference) exec(cmd []string, env map[string]string, user str
 				}
 
 				logger.Debugf("Exec command '%s'", cmd)
-				isTerminal := term.IsTerminal(int(os.Stdout.Fd()))
 				envList := make([]string, 0)
 				for k, v := range env {
 					envList = append(envList, fmt.Sprintf("%s=%s", k, v))
@@ -446,7 +454,7 @@ func (cr *containerReference) exec(cmd []string, env map[string]string, user str
 					Cmd:          cmd,
 					WorkingDir:   cr.input.WorkingDir,
 					Env:          envList,
-					Tty:          isTerminal,
+					Tty:          containerAllocateTerminal,
 					AttachStderr: true,
 					AttachStdout: true,
 				})
@@ -455,7 +463,7 @@ func (cr *containerReference) exec(cmd []string, env map[string]string, user str
 				}
 
 				resp, err := cr.cli.ContainerExecAttach(ctx, idResp.ID, types.ExecStartCheck{
-					Tty: isTerminal,
+					Tty: containerAllocateTerminal,
 				})
 				if err != nil {
 					return errors.WithStack(err)
@@ -472,7 +480,7 @@ func (cr *containerReference) exec(cmd []string, env map[string]string, user str
 					errWriter = os.Stderr
 				}
 
-				if !isTerminal || os.Getenv("NORAW") != "" {
+				if !containerAllocateTerminal || os.Getenv("NORAW") != "" {
 					_, err = stdcopy.StdCopy(outWriter, errWriter, resp.Reader)
 				} else {
 					_, err = io.Copy(outWriter, resp.Reader)

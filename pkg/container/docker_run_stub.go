@@ -50,6 +50,16 @@ type Container interface {
 	Remove() common.Executor
 }
 
+var containerAllocateTerminal bool
+
+func init() {
+	containerAllocateTerminal = term.IsTerminal(int(os.Stdout.Fd()))
+}
+
+func SetContainerAllocateTerminal(val bool) {
+	containerAllocateTerminal = val
+}
+
 // NewContainer creates a reference to a container
 func NewContainer(input *NewContainerInput) Container {
 	return nil
