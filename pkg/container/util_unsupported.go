@@ -1,3 +1,5 @@
+// +build plan9 openbsd,mips64
+
 package container
 
 import (
