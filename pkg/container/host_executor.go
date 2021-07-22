@@ -186,10 +186,14 @@ func (e *HostExecutor) Exec(command []string, cmdline string, env map[string]str
 			}
 			if err == nil {
 				if ppty != nil {
-					ppty.Write([]byte{4}) // EOT
-					io.Copy(e.StdOut, ppty)
+					go ppty.Write([]byte{4}) // EOT
+					go io.Copy(e.StdOut, ppty)
 				}
 				err = cmd.Wait()
+				if ppty != nil {
+					ppty.Close()
+					ppty = nil
+				}
 			}
 			if err != nil {
 				select {
