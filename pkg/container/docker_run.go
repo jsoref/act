@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/go-git/go-billy/v5/helper/polyfill"
 	"github.com/go-git/go-billy/v5/osfs"
@@ -457,6 +458,7 @@ func (cr *containerReference) exec(cmd []string, env map[string]string, user str
 					Tty:          containerAllocateTerminal,
 					AttachStderr: true,
 					AttachStdout: true,
+					AttachStdin:  containerAllocateTerminal,
 				})
 				if err != nil {
 					return errors.WithStack(err)
@@ -478,6 +480,17 @@ func (cr *containerReference) exec(cmd []string, env map[string]string, user str
 				errWriter := cr.input.Stderr
 				if errWriter == nil {
 					errWriter = os.Stderr
+				}
+
+				if containerAllocateTerminal {
+					go func() {
+						c := 1
+						var err error
+						for c == 1 && err == nil {
+							c, err = resp.Conn.Write([]byte{4})
+							<-time.After(time.Second)
+						}
+					}()
 				}
 
 				if !containerAllocateTerminal || os.Getenv("NORAW") != "" {

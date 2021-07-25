@@ -14,9 +14,11 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/nektos/act/pkg/common"
 	"github.com/pkg/errors"
+	"golang.org/x/term"
 )
 
 type HostExecutor struct {
@@ -127,6 +129,24 @@ func (e *HostExecutor) Start(attach bool) common.Executor {
 	}
 }
 
+type ptyWriter struct {
+	Out      io.Writer
+	AutoStop bool
+	Enabled  bool
+}
+
+func (w *ptyWriter) Write(buf []byte) (int, error) {
+	if w.Enabled {
+		if w.AutoStop && len(buf) > 0 && buf[len(buf)-1] == 4 {
+			n, _ := w.Out.Write(buf[:len(buf)-1])
+			return n, io.EOF
+		}
+		return w.Out.Write(buf)
+	} else {
+		return len(buf), nil
+	}
+}
+
 func (e *HostExecutor) Exec(command []string, cmdline string, env map[string]string, user string) common.Executor {
 	return func(ctx context.Context) error {
 		envList := make([]string, 0)
@@ -165,31 +185,57 @@ func (e *HostExecutor) Exec(command []string, cmdline string, env map[string]str
 					ppty.Close()
 				}
 			}()
-			{
-				var tty *os.File
-				defer func() {
-					if tty != nil {
-						tty.Close()
-					}
-				}()
-				if containerAllocateTerminal {
-					var err error
-					ppty, tty, err = openPty()
-					if err == nil {
-						cmd.Stdin = tty
-						cmd.Stdout = tty
-						cmd.Stderr = tty
-						cmd.SysProcAttr = getSysProcAttr(cmdline, true)
-					}
+			var tty *os.File
+			defer func() {
+				if tty != nil {
+					tty.Close()
 				}
-				err = cmd.Start()
+			}()
+			if containerAllocateTerminal {
+				var err error
+				ppty, tty, err = openPty()
+				if err == nil {
+					if term.IsTerminal(int(tty.Fd())) {
+						term.MakeRaw(int(tty.Fd()))
+					}
+					cmd.Stdin = tty
+					cmd.Stdout = tty
+					cmd.Stderr = tty
+					cmd.SysProcAttr = getSysProcAttr(cmdline, true)
+				}
 			}
+			writer := &ptyWriter{Out: e.StdOut}
+			logctx, finishLog := context.WithCancel(context.Background())
+			if ppty != nil {
+				go func() {
+					defer func() {
+						finishLog()
+					}()
+					io.Copy(writer, ppty)
+				}()
+			} else {
+				finishLog()
+			}
+			writer.Enabled = true
+			err = cmd.Start()
 			if err == nil {
 				if ppty != nil {
-					go ppty.Write([]byte{4}) // EOT
-					go io.Copy(e.StdOut, ppty)
+					go func() {
+						c := 1
+						var err error
+						for c == 1 && err == nil {
+							c, err = ppty.Write([]byte{4})
+							<-time.After(time.Second)
+						}
+					}()
 				}
 				err = cmd.Wait()
+				if tty != nil {
+					writer.AutoStop = true
+					tty.Write([]byte{4})
+				}
+				<-logctx.Done()
+
 				if ppty != nil {
 					ppty.Close()
 					ppty = nil
