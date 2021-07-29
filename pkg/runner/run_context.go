@@ -266,7 +266,7 @@ func (rc *RunContext) stopJobContainer() common.Executor {
 			return rc.JobContainer.Remove().Then(container.NewDockerVolumeRemoveExecutor(rc.jobContainerName(), false).If(func(ctx context.Context) bool {
 				_, isHost := rc.JobContainer.(*container.HostExecutor)
 				return !isHost
-			}))(common.WithLogger(context.Background(), common.Logger(ctx)))
+			})).Finally(rc.JobContainer.Close())(common.WithLogger(context.Background(), common.Logger(ctx)))
 		}
 		return nil
 	}

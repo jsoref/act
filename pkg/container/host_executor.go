@@ -33,6 +33,12 @@ func (e *HostExecutor) Create(capAdd []string, capDrop []string) common.Executor
 	}
 }
 
+func (e *HostExecutor) Close() common.Executor {
+	return func(ctx context.Context) error {
+		return nil
+	}
+}
+
 func (e *HostExecutor) Copy(destPath string, files ...*FileEntry) common.Executor {
 	return func(ctx context.Context) error {
 		for _, f := range files {
