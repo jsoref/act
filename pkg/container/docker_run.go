@@ -230,6 +230,11 @@ func GetDockerClient(ctx context.Context) (*client.Client, error) {
 	}
 	cli.NegotiateAPIVersion(ctx)
 
+	// go func() {
+	// 	<-ctx.Done()
+	// 	cli.Close()
+	// }()
+
 	return cli, err
 }
 

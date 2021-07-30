@@ -15,6 +15,7 @@ func NewDockerVolumeRemoveExecutor(volume string, force bool) common.Executor {
 		if err != nil {
 			return err
 		}
+		defer cli.Close()
 
 		list, err := cli.VolumeList(ctx, filters.NewArgs())
 		if err != nil {
@@ -45,6 +46,7 @@ func removeExecutor(volume string, force bool) common.Executor {
 		if err != nil {
 			return err
 		}
+		defer cli.Close()
 
 		return cli.VolumeRemove(ctx, volume, force)
 	}

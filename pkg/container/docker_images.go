@@ -17,6 +17,7 @@ func ImageExistsLocally(ctx context.Context, imageName string, platform string) 
 	if err != nil {
 		return false, err
 	}
+	defer cli.Close()
 
 	filters := filters.NewArgs()
 	filters.Add("reference", imageName)
@@ -61,6 +62,7 @@ func RemoveImage(ctx context.Context, imageName string, force bool, pruneChildre
 	if err != nil {
 		return false, err
 	}
+	defer cli.Close()
 
 	filters := filters.NewArgs()
 	filters.Add("reference", imageName)
