@@ -7,8 +7,8 @@ import (
 	"io"
 	"os"
 
-	"golang.org/x/term"
 	"github.com/nektos/act/pkg/common"
+	"golang.org/x/term"
 )
 
 // NewContainerInput the input for the New function
@@ -50,6 +50,7 @@ type Container interface {
 	UpdateFromEnv(srcPath string, env *map[string]string) common.Executor
 	UpdateFromPath(env *map[string]string) common.Executor
 	Remove() common.Executor
+	Close() common.Executor
 }
 
 var containerAllocateTerminal bool
