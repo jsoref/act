@@ -16,7 +16,9 @@ func getSysProcAttr(cmdLine string, tty bool) *syscall.SysProcAttr {
 			Setctty: true,
 		}
 	}
-	return &syscall.SysProcAttr{}
+	return &syscall.SysProcAttr{
+		Setpgid: true,
+	}
 }
 
 func openPty() (*os.File, *os.File, error) {
