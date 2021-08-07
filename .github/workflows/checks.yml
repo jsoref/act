@@ -98,7 +98,9 @@ jobs:
         id: image_cache
         with:
           key: docker-images-7
-          path: registry
+          path: |
+            registry
+            /tmp/docker-registry
       - uses: actions/setup-go@v1
         with:
           go-version: 1.16
