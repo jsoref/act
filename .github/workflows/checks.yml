@@ -138,13 +138,20 @@ jobs:
         if: steps.image_cache.outputs.cache-hit == 'true'
         run: |
           # docker image import registry registry:2
-          docker run -d -p 5000:5000 --name registry -v $PWD/docker-registry:/var/lib/registry registry:2 ./entrypoint.sh /etc/docker/registry/config.yml && npx wait-on tcp:5000
+          echo Setup local registry
+          docker run -d -p 5000:5000 --name registry -v $PWD/docker-registry:/var/lib/registry registry:2 ./entrypoint.sh /etc/docker/registry/config.yml
+          echo Sleep 5
+          sleep 5
+          echo Pull
           docker pull localhost:5000/node:12-buster
           docker tag localhost:5000/node:12-buster node:12-buster
+          echo Pull
           docker pull localhost:5000/node:12-buster-slim
           docker tag localhost:5000/node:12-buster-slim node:12-buster-slim
+          echo Pull
           docker pull localhost:5000/ubuntu:18.04
           docker tag localhost:5000/ubuntu:18.04 ubuntu:18.04
+          echo Pull
           docker pull localhost:5000/tonistiigi/binfmt:latest
           docker tag localhost:5000/tonistiigi/binfmt:latest tonistiigi/binfmt:latest
       - name: 🛠️ Install Qemu for running containers with different architecture 🛠️
