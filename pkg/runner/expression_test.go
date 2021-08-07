@@ -193,6 +193,7 @@ func TestInterpolate(t *testing.T) {
 		{"${{format('{0}\n{0}', secrets.case_insensitive_secret)}}", "value\nvalue"},
 		{"${{format('secrets.case_insensitive_secret {0}\n{0}', secrets.case_insensitive_secret)}}", "secrets.case_insensitive_secret value\nvalue"},
 		{"${{format('''secrets.case_insensitive_secret {0}\n{0}', secrets.case_insensitive_secret)}}", "'secrets.case_insensitive_secret value\nvalue"},
+		{"${{'\\''\\'}}", "\\'\\"},
 	}
 
 	updateTestExpressionWorkflow(t, tables, rc)
