@@ -202,9 +202,8 @@ func (w *ptyWriter) Write(buf []byte) (int, error) {
 			return n, io.EOF
 		}
 		return w.Out.Write(buf)
-	} else {
-		return len(buf), nil
 	}
+	return len(buf), nil
 }
 
 func lookupPathHost(cmd string, env map[string]string, writer io.Writer) (string, error) {
