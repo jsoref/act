@@ -222,7 +222,9 @@ func (e *HostExecutor) Exec(command []string, cmdline string, env map[string]str
 
 		if len(f) == 0 {
 			err := "Cannot find: " + fmt.Sprint(command[0]) + " in PATH\n"
-			e.StdOut.Write([]byte(err))
+			if _, _err := e.StdOut.Write([]byte(err)); _err != nil {
+				return errors.Wrap(_err, err)
+			}
 			return errors.New(err)
 		} else {
 			cmd := exec.CommandContext(ctx, f)
@@ -252,7 +254,10 @@ func (e *HostExecutor) Exec(command []string, cmdline string, env map[string]str
 				ppty, tty, err = openPty()
 				if err == nil {
 					if term.IsTerminal(int(tty.Fd())) {
-						term.MakeRaw(int(tty.Fd()))
+						_, err := term.MakeRaw(int(tty.Fd()))
+						if err != nil {
+							return err
+						}
 					}
 					cmd.Stdin = tty
 					cmd.Stdout = tty
@@ -267,7 +272,9 @@ func (e *HostExecutor) Exec(command []string, cmdline string, env map[string]str
 					defer func() {
 						finishLog()
 					}()
-					io.Copy(writer, ppty)
+					if _, err := io.Copy(writer, ppty); err != nil {
+						return
+					}
 				}()
 			} else {
 				finishLog()
