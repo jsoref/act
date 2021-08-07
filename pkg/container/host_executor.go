@@ -42,8 +42,12 @@ func (e *HostExecutor) Close() common.Executor {
 func (e *HostExecutor) Copy(destPath string, files ...*FileEntry) common.Executor {
 	return func(ctx context.Context) error {
 		for _, f := range files {
-			os.MkdirAll(filepath.Dir(filepath.Join(destPath, f.Name)), 0777)
-			os.WriteFile(filepath.Join(destPath, f.Name), []byte(f.Body), fs.FileMode(f.Mode))
+			if err := os.MkdirAll(filepath.Dir(filepath.Join(destPath, f.Name)), 0777); err != nil {
+				return err
+			}
+			if err := os.WriteFile(filepath.Join(destPath, f.Name), []byte(f.Body), fs.FileMode(f.Mode)); err != nil {
+				return err
+			}
 		}
 		return nil
 	}
@@ -53,20 +57,43 @@ func (e *HostExecutor) CopyDir(destPath string, srcPath string, useGitIgnore boo
 	return func(ctx context.Context) error {
 		return filepath.Walk(srcPath, func(file string, fi os.FileInfo, err error) error {
 			if fi.Mode()&os.ModeSymlink != 0 {
-				lnk, _ := os.Readlink(file)
-				relpath, _ := filepath.Rel(srcPath, file)
+				lnk, err := os.Readlink(file)
+				if err != nil {
+					return err
+				}
+				relpath, err := filepath.Rel(srcPath, file)
+				if err != nil {
+					return err
+				}
 				fdestpath := filepath.Join(destPath, relpath)
-				os.MkdirAll(filepath.Dir(fdestpath), 0777)
-				os.Symlink(lnk, fdestpath)
+				if err := os.MkdirAll(filepath.Dir(fdestpath), 0777); err != nil {
+					return err
+				}
+				if err := os.Symlink(lnk, fdestpath); err != nil {
+					return err
+				}
 			} else if fi.Mode().IsRegular() {
-				relpath, _ := filepath.Rel(srcPath, file)
-				f, _ := os.Open(file)
+				relpath, err := filepath.Rel(srcPath, file)
+				if err != nil {
+					return err
+				}
+				f, err := os.Open(file)
+				if err != nil {
+					return err
+				}
 				defer f.Close()
 				fdestpath := filepath.Join(destPath, relpath)
-				os.MkdirAll(filepath.Dir(fdestpath), 0777)
-				df, _ := os.OpenFile(fdestpath, os.O_CREATE|os.O_WRONLY, fi.Mode())
+				if err := os.MkdirAll(filepath.Dir(fdestpath), 0777); err != nil {
+					return err
+				}
+				df, err := os.OpenFile(fdestpath, os.O_CREATE|os.O_WRONLY, fi.Mode())
+				if err != nil {
+					return err
+				}
 				defer df.Close()
-				io.Copy(df, f)
+				if _, err := io.Copy(df, f); err != nil {
+					return err
+				}
 			}
 			return nil
 		})
@@ -84,26 +111,47 @@ func (e *HostExecutor) GetContainerArchive(ctx context.Context, srcPath string) 
 	srcPath = filepath.Clean(srcPath)
 	filecbk := func(file string, fi os.FileInfo, err error) error {
 		if fi.Mode()&os.ModeSymlink != 0 {
-			lnk, _ := os.Readlink(file)
-			fih, _ := tar.FileInfoHeader(fi, lnk)
-			fih.Name, _ = filepath.Rel(srcPath, file)
+			lnk, err := os.Readlink(file)
+			if err != nil {
+				return err
+			}
+			fih, err := tar.FileInfoHeader(fi, lnk)
+			if err != nil {
+				return err
+			}
+			fih.Name, err = filepath.Rel(srcPath, file)
+			if err != nil {
+				return err
+			}
 			if string(filepath.Separator) != "/" {
 				fih.Name = strings.ReplaceAll(fih.Name, string(filepath.Separator), "/")
 			}
-			tw.WriteHeader(fih)
+			if err := tw.WriteHeader(fih); err != nil {
+				return err
+			}
 		} else if fi.Mode().IsRegular() {
-			fih, _ := tar.FileInfoHeader(fi, "")
-			fih.Name, _ = filepath.Rel(srcPath, file)
+			fih, err := tar.FileInfoHeader(fi, "")
+			if err != nil {
+				return err
+			}
+			fih.Name, err = filepath.Rel(srcPath, file)
+			if err != nil {
+				return err
+			}
 			if string(filepath.Separator) != "/" {
 				fih.Name = strings.ReplaceAll(fih.Name, string(filepath.Separator), "/")
 			}
-			tw.WriteHeader(fih)
+			if err := tw.WriteHeader(fih); err != nil {
+				return err
+			}
 			f, err := os.Open(file)
 			if err != nil {
 				return err
 			}
 			defer f.Close()
-			io.Copy(tw, f)
+			if _, err := io.Copy(tw, f); err != nil {
+				return err
+			}
 		}
 		return nil
 	}
@@ -112,7 +160,9 @@ func (e *HostExecutor) GetContainerArchive(ctx context.Context, srcPath string) 
 		return nil, err
 	}
 	if fi.IsDir() {
-		filepath.Walk(srcPath, filecbk)
+		if err := filepath.Walk(srcPath, filecbk); err != nil {
+			return nil, err
+		}
 	} else {
 		file := srcPath
 		srcPath = filepath.Dir(srcPath)
