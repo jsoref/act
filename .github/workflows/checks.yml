@@ -64,7 +64,7 @@ jobs:
       - uses: actions/cache@v2
         id: image_cache
         with:
-          key: docker-images-4
+          key: docker-images-5
           path: registry
       - name: Pull and export images
         if: steps.image_cache.outputs.cache-hit != 'true'
@@ -96,7 +96,7 @@ jobs:
       - uses: actions/cache@v2
         id: image_cache
         with:
-          key: docker-images-4
+          key: docker-images-5
           path: registry
       - uses: actions/setup-go@v1
         with:
