@@ -57,8 +57,22 @@ jobs:
         with:
           files: coverage.txt
           fail_ci_if_error: true # optional (default = false)
-
+  dump_images:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/cache@v2
+        id: image_cache
+        with:
+          key: node-12-buster
+          path: node-12-buster.tar.gz
+      - name: Pull and export image
+        if: steps.image_cache.outputs.cache-hit != 'true'
+        run: |
+          docker pull node:12-buster
+          docker image save node:12-buster -o node-12-buster.tar.gz
   test-macos:
+    needs: dump_images
     name: test-macos
     runs-on: macos-latest
     continue-on-error: true # Don't let macos test fail whole workflow
@@ -66,6 +80,11 @@ jobs:
       ISO_PATH: ~/.docker/machine/cache/boot2docker.iso
     steps:
       - uses: actions/checkout@v2
+      - uses: actions/cache@v2
+        id: image_cache
+        with:
+          key: node-12-buster
+          path: node-12-buster.tar.gz
       - uses: actions/setup-go@v1
         with:
           go-version: 1.16
@@ -100,6 +119,10 @@ jobs:
           printf " 🛠️ Install Qemu for running containers with different architecture 🛠️ \n\n"
           docker run --rm --privileged tonistiigi/binfmt --install all
           printf " 🛠️ Finished installing Docker 🛠️ \n\n"
+      - name: Import image
+        if: steps.image_cache.outputs.cache-hit == 'true'
+        run: |
+          docker image import node-12-buster.tar.gz node:12-buster
       - run: go test -v -timeout 30m -cover ./...
         env:
           CGO_ENABLED: 0
