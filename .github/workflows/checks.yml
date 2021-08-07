@@ -64,12 +64,12 @@ jobs:
       - uses: actions/cache@v2
         id: image_cache
         with:
-          key: docker-images-2
+          key: docker-images-3
           path: registry
       - name: Pull and export images
         if: steps.image_cache.outputs.cache-hit != 'true'
         run: |
-          docker run -d -p 5000:5000 --restart=always --name registry registry:2 && npx wait-on tcp:5000
+          docker run -d -p 5000:5000 --name registry registry:2 && npx wait-on tcp:5000
           docker pull node:12-buster
           docker tag node:12-buster localhost:5000/node:12-buster
           docker pull node:12-buster-slim
@@ -92,7 +92,7 @@ jobs:
       - uses: actions/cache@v2
         id: image_cache
         with:
-          key: docker-images-2
+          key: docker-images-3
           path: registry
       - uses: actions/setup-go@v1
         with:
