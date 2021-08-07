@@ -100,6 +100,53 @@ func (e *HostExecutor) CopyDir(destPath string, srcPath string, useGitIgnore boo
 	}
 }
 
+func fileCallbackfilecbk(srcPath string, tw *tar.Writer, file string, fi os.FileInfo, err error) error {
+	if fi.Mode()&os.ModeSymlink != 0 {
+		lnk, err := os.Readlink(file)
+		if err != nil {
+			return err
+		}
+		fih, err := tar.FileInfoHeader(fi, lnk)
+		if err != nil {
+			return err
+		}
+		fih.Name, err = filepath.Rel(srcPath, file)
+		if err != nil {
+			return err
+		}
+		if string(filepath.Separator) != "/" {
+			fih.Name = strings.ReplaceAll(fih.Name, string(filepath.Separator), "/")
+		}
+		if err := tw.WriteHeader(fih); err != nil {
+			return err
+		}
+	} else if fi.Mode().IsRegular() {
+		fih, err := tar.FileInfoHeader(fi, "")
+		if err != nil {
+			return err
+		}
+		fih.Name, err = filepath.Rel(srcPath, file)
+		if err != nil {
+			return err
+		}
+		if string(filepath.Separator) != "/" {
+			fih.Name = strings.ReplaceAll(fih.Name, string(filepath.Separator), "/")
+		}
+		if err := tw.WriteHeader(fih); err != nil {
+			return err
+		}
+		f, err := os.Open(file)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		if _, err := io.Copy(tw, f); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (e *HostExecutor) GetContainerArchive(ctx context.Context, srcPath string) (rc io.ReadCloser, err error) {
 	buf := &bytes.Buffer{}
 	tw := tar.NewWriter(buf)
@@ -109,55 +156,12 @@ func (e *HostExecutor) GetContainerArchive(ctx context.Context, srcPath string) 
 		}
 	}()
 	srcPath = filepath.Clean(srcPath)
-	filecbk := func(file string, fi os.FileInfo, err error) error {
-		if fi.Mode()&os.ModeSymlink != 0 {
-			lnk, err := os.Readlink(file)
-			if err != nil {
-				return err
-			}
-			fih, err := tar.FileInfoHeader(fi, lnk)
-			if err != nil {
-				return err
-			}
-			fih.Name, err = filepath.Rel(srcPath, file)
-			if err != nil {
-				return err
-			}
-			if string(filepath.Separator) != "/" {
-				fih.Name = strings.ReplaceAll(fih.Name, string(filepath.Separator), "/")
-			}
-			if err := tw.WriteHeader(fih); err != nil {
-				return err
-			}
-		} else if fi.Mode().IsRegular() {
-			fih, err := tar.FileInfoHeader(fi, "")
-			if err != nil {
-				return err
-			}
-			fih.Name, err = filepath.Rel(srcPath, file)
-			if err != nil {
-				return err
-			}
-			if string(filepath.Separator) != "/" {
-				fih.Name = strings.ReplaceAll(fih.Name, string(filepath.Separator), "/")
-			}
-			if err := tw.WriteHeader(fih); err != nil {
-				return err
-			}
-			f, err := os.Open(file)
-			if err != nil {
-				return err
-			}
-			defer f.Close()
-			if _, err := io.Copy(tw, f); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
 	fi, err := os.Lstat(srcPath)
 	if err != nil {
 		return nil, err
+	}
+	filecbk := func(file string, fi os.FileInfo, err error) error {
+		return fileCallbackfilecbk(srcPath, tw, file, fi, err)
 	}
 	if fi.IsDir() {
 		if err := filepath.Walk(srcPath, filecbk); err != nil {
@@ -203,6 +207,21 @@ func (w *ptyWriter) Write(buf []byte) (int, error) {
 	}
 }
 
+func lookupPathHost(cmd string, env map[string]string, writer io.Writer) (string, error) {
+	oldpath, _ := os.LookupEnv("PATH")
+	os.Setenv("PATH", env["PATH"])
+	defer os.Setenv("PATH", oldpath)
+	f, err := exec.LookPath(cmd)
+	if err != nil {
+		err := "Cannot find: " + fmt.Sprint(cmd) + " in PATH"
+		if _, _err := writer.Write([]byte(err + "\n")); _err != nil {
+			return "", errors.Wrap(_err, err)
+		}
+		return "", errors.New(err)
+	}
+	return f, nil
+}
+
 func (e *HostExecutor) Exec(command []string, cmdline string, env map[string]string, user string) common.Executor {
 	return func(ctx context.Context) error {
 		envList := make([]string, 0)
@@ -212,108 +231,102 @@ func (e *HostExecutor) Exec(command []string, cmdline string, env map[string]str
 		for k, v := range env {
 			envList = append(envList, fmt.Sprintf("%s=%s", k, v))
 		}
-		oldpath, _ := os.LookupEnv("PATH")
-		os.Setenv("PATH", env["PATH"])
-		f, _ := exec.LookPath(command[0])
-		os.Setenv("PATH", oldpath)
-		if len(f) == 0 {
-			f, _ = exec.LookPath(command[0])
-		}
 
-		if len(f) == 0 {
-			err := "Cannot find: " + fmt.Sprint(command[0]) + " in PATH\n"
-			if _, _err := e.StdOut.Write([]byte(err)); _err != nil {
-				return errors.Wrap(_err, err)
-			}
-			return errors.New(err)
-		} else {
-			cmd := exec.CommandContext(ctx, f)
-			cmd.Path = f
-			cmd.Args = command
-			cmd.Stdin = nil
-			cmd.Stdout = e.StdOut
-			cmd.Env = envList
-			cmd.Stderr = e.StdOut
-			cmd.Dir = e.Path
-			cmd.SysProcAttr = getSysProcAttr(cmdline, false)
-			var err error
-			var ppty *os.File
-			defer func() {
-				if ppty != nil {
-					ppty.Close()
-				}
-			}()
-			var tty *os.File
-			defer func() {
-				if tty != nil {
-					tty.Close()
-				}
-			}()
-			if containerAllocateTerminal {
-				var err error
-				ppty, tty, err = openPty()
-				if err == nil {
-					if term.IsTerminal(int(tty.Fd())) {
-						_, err := term.MakeRaw(int(tty.Fd()))
-						if err != nil {
-							return err
-						}
-					}
-					cmd.Stdin = tty
-					cmd.Stdout = tty
-					cmd.Stderr = tty
-					cmd.SysProcAttr = getSysProcAttr(cmdline, true)
-				}
-			}
-			writer := &ptyWriter{Out: e.StdOut}
-			logctx, finishLog := context.WithCancel(context.Background())
-			if ppty != nil {
-				go func() {
-					defer func() {
-						finishLog()
-					}()
-					if _, err := io.Copy(writer, ppty); err != nil {
-						return
-					}
-				}()
-			} else {
-				finishLog()
-			}
-			writer.Enabled = true
-			err = cmd.Start()
-			if err == nil {
-				if ppty != nil {
-					go func() {
-						c := 1
-						var err error
-						for c == 1 && err == nil {
-							c, err = ppty.Write([]byte{4})
-							<-time.After(time.Second)
-						}
-					}()
-				}
-				err = cmd.Wait()
-				if tty != nil {
-					writer.AutoStop = true
-					tty.Write([]byte{4})
-				}
-				<-logctx.Done()
-
-				if ppty != nil {
-					ppty.Close()
-					ppty = nil
-				}
-			}
-			if err != nil {
-				select {
-				case <-ctx.Done():
-					e.StdOut.Write([]byte("This step was cancelled\n"))
-				default:
-				}
-				e.StdOut.Write([]byte(err.Error() + "\n"))
-			}
+		f, err := lookupPathHost(command[0], env, e.StdOut)
+		if err != nil {
 			return err
 		}
+		cmd := exec.CommandContext(ctx, f)
+		cmd.Path = f
+		cmd.Args = command
+		cmd.Stdin = nil
+		cmd.Stdout = e.StdOut
+		cmd.Env = envList
+		cmd.Stderr = e.StdOut
+		cmd.Dir = e.Path
+		cmd.SysProcAttr = getSysProcAttr(cmdline, false)
+		var ppty *os.File
+		defer func() {
+			if ppty != nil {
+				ppty.Close()
+			}
+		}()
+		var tty *os.File
+		defer func() {
+			if tty != nil {
+				tty.Close()
+			}
+		}()
+		if containerAllocateTerminal {
+			var err error
+			ppty, tty, err = openPty()
+			if err == nil {
+				if term.IsTerminal(int(tty.Fd())) {
+					_, err := term.MakeRaw(int(tty.Fd()))
+					if err != nil {
+						return err
+					}
+				}
+				cmd.Stdin = tty
+				cmd.Stdout = tty
+				cmd.Stderr = tty
+				cmd.SysProcAttr = getSysProcAttr(cmdline, true)
+			}
+		}
+		writer := &ptyWriter{Out: e.StdOut}
+		logctx, finishLog := context.WithCancel(context.Background())
+		if ppty != nil {
+			go func() {
+				defer func() {
+					finishLog()
+				}()
+				if _, err := io.Copy(writer, ppty); err != nil {
+					return
+				}
+			}()
+		} else {
+			finishLog()
+		}
+		writer.Enabled = true
+		err = cmd.Start()
+		if err == nil {
+			if ppty != nil {
+				go func() {
+					c := 1
+					var err error
+					for c == 1 && err == nil {
+						c, err = ppty.Write([]byte{4})
+						<-time.After(time.Second)
+					}
+				}()
+			}
+			err = cmd.Wait()
+			if tty != nil {
+				writer.AutoStop = true
+				if _, err := tty.Write([]byte{4}); err != nil {
+					common.Logger(ctx).Debug("Failed to write EOT")
+				}
+			}
+			<-logctx.Done()
+
+			if ppty != nil {
+				ppty.Close()
+				ppty = nil
+			}
+		}
+		if err != nil {
+			select {
+			case <-ctx.Done():
+				if _, err := e.StdOut.Write([]byte("This step was cancelled\n")); err != nil {
+					common.Logger(ctx).Debug("Failed to write step was cancelled")
+				}
+			default:
+			}
+			if _, err := e.StdOut.Write([]byte(err.Error() + "\n")); err != nil {
+				common.Logger(ctx).Debug("Failed to write error")
+			}
+		}
+		return err
 	}
 }
 

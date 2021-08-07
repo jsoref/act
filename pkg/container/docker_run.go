@@ -442,6 +442,89 @@ func (cr *containerReference) extractPath(env *map[string]string) common.Executo
 	}
 }
 
+func (cr *containerReference) exec2(cmd []string, env map[string]string, user string) common.Executor {
+	return func(ctx context.Context) error {
+		logger := common.Logger(ctx)
+		// Fix slashes when running on Windows
+		if runtime.GOOS == "windows" {
+			var newCmd []string
+			for _, v := range cmd {
+				newCmd = append(newCmd, strings.ReplaceAll(v, `\`, `/`))
+			}
+			cmd = newCmd
+		}
+
+		logger.Debugf("Exec command '%s'", cmd)
+		envList := make([]string, 0)
+		for k, v := range env {
+			envList = append(envList, fmt.Sprintf("%s=%s", k, v))
+		}
+
+		idResp, err := cr.cli.ContainerExecCreate(ctx, cr.id, types.ExecConfig{
+			User:         user,
+			Cmd:          cmd,
+			WorkingDir:   cr.input.WorkingDir,
+			Env:          envList,
+			Tty:          containerAllocateTerminal,
+			AttachStderr: true,
+			AttachStdout: true,
+			AttachStdin:  containerAllocateTerminal,
+		})
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		resp, err := cr.cli.ContainerExecAttach(ctx, idResp.ID, types.ExecStartCheck{
+			Tty: containerAllocateTerminal,
+		})
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		defer resp.Close()
+
+		var outWriter io.Writer
+		outWriter = cr.input.Stdout
+		if outWriter == nil {
+			outWriter = os.Stdout
+		}
+		errWriter := cr.input.Stderr
+		if errWriter == nil {
+			errWriter = os.Stderr
+		}
+
+		if containerAllocateTerminal {
+			go func() {
+				c := 1
+				var err error
+				for c == 1 && err == nil {
+					c, err = resp.Conn.Write([]byte{4})
+					<-time.After(time.Second)
+				}
+			}()
+		}
+
+		if !containerAllocateTerminal || os.Getenv("NORAW") != "" {
+			_, err = stdcopy.StdCopy(outWriter, errWriter, resp.Reader)
+		} else {
+			_, err = io.Copy(outWriter, resp.Reader)
+		}
+		if err != nil {
+			logger.Error(err)
+		}
+
+		inspectResp, err := cr.cli.ContainerExecInspect(ctx, idResp.ID)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		if inspectResp.ExitCode == 0 {
+			return nil
+		}
+
+		return fmt.Errorf("exit with `FAILURE`: %v", inspectResp.ExitCode)
+	}
+}
+
 func (cr *containerReference) exec(cmd []string, env map[string]string, user string) common.Executor {
 	return func(ctx context.Context) error {
 		logger := common.Logger(ctx)
@@ -450,85 +533,7 @@ func (cr *containerReference) exec(cmd []string, env map[string]string, user str
 			defer func() {
 				done <- errors.New("Invalid Operation")
 			}()
-			done <- func() error {
-				// Fix slashes when running on Windows
-				if runtime.GOOS == "windows" {
-					var newCmd []string
-					for _, v := range cmd {
-						newCmd = append(newCmd, strings.ReplaceAll(v, `\`, `/`))
-					}
-					cmd = newCmd
-				}
-
-				logger.Debugf("Exec command '%s'", cmd)
-				envList := make([]string, 0)
-				for k, v := range env {
-					envList = append(envList, fmt.Sprintf("%s=%s", k, v))
-				}
-
-				idResp, err := cr.cli.ContainerExecCreate(ctx, cr.id, types.ExecConfig{
-					User:         user,
-					Cmd:          cmd,
-					WorkingDir:   cr.input.WorkingDir,
-					Env:          envList,
-					Tty:          containerAllocateTerminal,
-					AttachStderr: true,
-					AttachStdout: true,
-					AttachStdin:  containerAllocateTerminal,
-				})
-				if err != nil {
-					return errors.WithStack(err)
-				}
-
-				resp, err := cr.cli.ContainerExecAttach(ctx, idResp.ID, types.ExecStartCheck{
-					Tty: containerAllocateTerminal,
-				})
-				if err != nil {
-					return errors.WithStack(err)
-				}
-				defer resp.Close()
-
-				var outWriter io.Writer
-				outWriter = cr.input.Stdout
-				if outWriter == nil {
-					outWriter = os.Stdout
-				}
-				errWriter := cr.input.Stderr
-				if errWriter == nil {
-					errWriter = os.Stderr
-				}
-
-				if containerAllocateTerminal {
-					go func() {
-						c := 1
-						var err error
-						for c == 1 && err == nil {
-							c, err = resp.Conn.Write([]byte{4})
-							<-time.After(time.Second)
-						}
-					}()
-				}
-
-				if !containerAllocateTerminal || os.Getenv("NORAW") != "" {
-					_, err = stdcopy.StdCopy(outWriter, errWriter, resp.Reader)
-				} else {
-					_, err = io.Copy(outWriter, resp.Reader)
-				}
-				if err != nil {
-					logger.Error(err)
-				}
-
-				inspectResp, err := cr.cli.ContainerExecInspect(ctx, idResp.ID)
-				if err != nil {
-					return errors.WithStack(err)
-				}
-
-				if inspectResp.ExitCode == 0 {
-					return nil
-				}
-
-				return fmt.Errorf("exit with `FAILURE`: %v", inspectResp.ExitCode)
-			}()
+			done <- cr.exec2(cmd, env, user)(ctx)
 		}()
 		select {
 		case <-ctx.Done():
