@@ -141,12 +141,10 @@ jobs:
           docker image load -i registry
           echo Setup local registry
           docker run -d -p 5000:5000 --name registry -v $PWD/docker-registry:/var/lib/registry registry:2 ./entrypoint.sh /etc/docker/registry/config.yml
-          echo wait for tcp 5000
-          npx wait-on tcp:5000
-          echo pulling image from cache
+          echo pulling images from cache
           for image in "node:12-buster" "node:12-buster-slim" "ubuntu:18.04" "alpine:3.10" "tonistiigi/binfmt:latest"
           do
-            docker pull "localhost:5000/$image"
+            docker pull "localhost:5000/$image" || sleep 1 && docker pull "localhost:5000/$image" || sleep 2 && docker pull "localhost:5000/$image"
             docker tag "localhost:5000/$image" "$image"
           done
       - name: 🛠️ Install Qemu for running containers with different architecture 🛠️
