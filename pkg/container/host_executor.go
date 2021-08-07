@@ -288,30 +288,31 @@ func (e *HostExecutor) Exec(command []string, cmdline string, env map[string]str
 		}
 		writer.Enabled = true
 		err = cmd.Start()
-		if err == nil {
-			if ppty != nil {
-				go func() {
-					c := 1
-					var err error
-					for c == 1 && err == nil {
-						c, err = ppty.Write([]byte{4})
-						<-time.After(time.Second)
-					}
-				}()
-			}
-			err = cmd.Wait()
-			if tty != nil {
-				writer.AutoStop = true
-				if _, err := tty.Write([]byte{4}); err != nil {
-					common.Logger(ctx).Debug("Failed to write EOT")
+		if err != nil {
+			return err
+		}
+		if ppty != nil {
+			go func() {
+				c := 1
+				var err error
+				for c == 1 && err == nil {
+					c, err = ppty.Write([]byte{4})
+					<-time.After(time.Second)
 				}
+			}()
+		}
+		err = cmd.Wait()
+		if tty != nil {
+			writer.AutoStop = true
+			if _, err := tty.Write([]byte{4}); err != nil {
+				common.Logger(ctx).Debug("Failed to write EOT")
 			}
-			<-logctx.Done()
+		}
+		<-logctx.Done()
 
-			if ppty != nil {
-				ppty.Close()
-				ppty = nil
-			}
+		if ppty != nil {
+			ppty.Close()
+			ppty = nil
 		}
 		if err != nil {
 			select {
