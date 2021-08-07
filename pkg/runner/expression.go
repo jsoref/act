@@ -300,9 +300,8 @@ func vmFormat(vm *otto.Otto) {
 				}
 				if vals[i].IsNull() || vals[i].IsUndefined() {
 					return ""
-				} else {
-					return vals[i].String()
 				}
+				return vals[i].String()
 			}
 		})
 	})
