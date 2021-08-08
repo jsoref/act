@@ -454,11 +454,7 @@ func (cr *containerReference) exec2(cmd []string, env map[string]string, user st
 	}
 
 	logger.Debugf("Exec command '%s'", cmd)
-	envList := make([]string, 0)
-	for k, v := range env {
-		envList = append(envList, fmt.Sprintf("%s=%s", k, v))
-	}
-
+	envList := getEnvListFromMap(env)
 	idResp, err := cr.cli.ContainerExecCreate(ctx, cr.id, types.ExecConfig{
 		User:         user,
 		Cmd:          cmd,

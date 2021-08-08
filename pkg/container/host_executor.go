@@ -12,7 +12,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
 	"time"
 
@@ -221,16 +220,38 @@ func lookupPathHost(cmd string, env map[string]string, writer io.Writer) (string
 	return f, nil
 }
 
+func setupPty(cmd *exec.Cmd, cmdline string) (*os.File, *os.File, error) {
+	ppty, tty, err := openPty()
+	if err != nil {
+		return nil, nil, err
+	}
+	if term.IsTerminal(int(tty.Fd())) {
+		_, err := term.MakeRaw(int(tty.Fd()))
+		if err != nil {
+			ppty.Close()
+			tty.Close()
+			return nil, nil, err
+		}
+	}
+	cmd.Stdin = tty
+	cmd.Stdout = tty
+	cmd.Stderr = tty
+	cmd.SysProcAttr = getSysProcAttr(cmdline, true)
+	return ppty, tty, nil
+}
+
+func writeKeepAlive(ppty io.Writer) {
+	c := 1
+	var err error
+	for c == 1 && err == nil {
+		c, err = ppty.Write([]byte{4})
+		<-time.After(time.Second)
+	}
+}
+
 func (e *HostExecutor) Exec(command []string, cmdline string, env map[string]string, user string) common.Executor {
 	return func(ctx context.Context) error {
-		envList := make([]string, 0)
-		if runtime.GOOS == "windows" && env["PATHEXT"] == "" {
-			env["PATHEXT"] = ".COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC;.CPL"
-		}
-		for k, v := range env {
-			envList = append(envList, fmt.Sprintf("%s=%s", k, v))
-		}
-
+		envList := getEnvListFromMap(env)
 		f, err := lookupPathHost(command[0], env, e.StdOut)
 		if err != nil {
 			return err
@@ -258,18 +279,9 @@ func (e *HostExecutor) Exec(command []string, cmdline string, env map[string]str
 		}()
 		if containerAllocateTerminal {
 			var err error
-			ppty, tty, err = openPty()
-			if err == nil {
-				if term.IsTerminal(int(tty.Fd())) {
-					_, err := term.MakeRaw(int(tty.Fd()))
-					if err != nil {
-						return err
-					}
-				}
-				cmd.Stdin = tty
-				cmd.Stdout = tty
-				cmd.Stderr = tty
-				cmd.SysProcAttr = getSysProcAttr(cmdline, true)
+			ppty, tty, err = setupPty(cmd, cmdline)
+			if err != nil {
+				common.Logger(ctx).Debugf("Failed to setup Pty %v\n", err.Error())
 			}
 		}
 		writer := &ptyWriter{Out: e.StdOut}
@@ -292,14 +304,7 @@ func (e *HostExecutor) Exec(command []string, cmdline string, env map[string]str
 			return err
 		}
 		if ppty != nil {
-			go func() {
-				c := 1
-				var err error
-				for c == 1 && err == nil {
-					c, err = ppty.Write([]byte{4})
-					<-time.After(time.Second)
-				}
-			}()
+			go writeKeepAlive(ppty)
 		}
 		err = cmd.Wait()
 		if tty != nil {
