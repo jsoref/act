@@ -254,68 +254,70 @@ func copyPtyOutput(writer io.Writer, ppty io.Reader, finishLog context.CancelFun
 	}
 }
 
-func (e *HostExecutor) Exec(command []string, cmdline string, env map[string]string, user string) common.Executor {
-	return func(ctx context.Context) error {
-		envList := getEnvListFromMap(env)
-		f, err := lookupPathHost(command[0], env, e.StdOut)
-		if err != nil {
-			return err
-		}
-		cmd := exec.CommandContext(ctx, f)
-		cmd.Path = f
-		cmd.Args = command
-		cmd.Stdin = nil
-		cmd.Stdout = e.StdOut
-		cmd.Env = envList
-		cmd.Stderr = e.StdOut
-		cmd.Dir = e.Path
-		cmd.SysProcAttr = getSysProcAttr(cmdline, false)
-		var ppty *os.File
-		defer func() {
-			if ppty != nil {
-				ppty.Close()
-			}
-		}()
-		var tty *os.File
-		defer func() {
-			if tty != nil {
-				tty.Close()
-			}
-		}()
-		if containerAllocateTerminal {
-			var err error
-			ppty, tty, err = setupPty(cmd, cmdline)
-			if err != nil {
-				common.Logger(ctx).Debugf("Failed to setup Pty %v\n", err.Error())
-			}
-		}
-		writer := &ptyWriter{Out: e.StdOut}
-		logctx, finishLog := context.WithCancel(context.Background())
-		if ppty != nil {
-			go copyPtyOutput(writer, ppty, finishLog)
-		} else {
-			finishLog()
-		}
-		if ppty != nil {
-			go writeKeepAlive(ppty)
-		}
-		err = cmd.Run()
-		if err != nil {
-			return err
-		}
-		if tty != nil {
-			writer.AutoStop = true
-			if _, err := tty.Write([]byte{4}); err != nil {
-				common.Logger(ctx).Debug("Failed to write EOT")
-			}
-		}
-		<-logctx.Done()
-
+func (e *HostExecutor) exec2(ctx context.Context, command []string, cmdline string, env map[string]string, user string) error {
+	envList := getEnvListFromMap(env)
+	f, err := lookupPathHost(command[0], env, e.StdOut)
+	if err != nil {
+		return err
+	}
+	cmd := exec.CommandContext(ctx, f)
+	cmd.Path = f
+	cmd.Args = command
+	cmd.Stdin = nil
+	cmd.Stdout = e.StdOut
+	cmd.Env = envList
+	cmd.Stderr = e.StdOut
+	cmd.Dir = e.Path
+	cmd.SysProcAttr = getSysProcAttr(cmdline, false)
+	var ppty *os.File
+	var tty *os.File
+	defer func() {
 		if ppty != nil {
 			ppty.Close()
-			ppty = nil
 		}
+		if tty != nil {
+			tty.Close()
+		}
+	}()
+	if containerAllocateTerminal {
+		var err error
+		ppty, tty, err = setupPty(cmd, cmdline)
 		if err != nil {
+			common.Logger(ctx).Debugf("Failed to setup Pty %v\n", err.Error())
+		}
+	}
+	writer := &ptyWriter{Out: e.StdOut}
+	logctx, finishLog := context.WithCancel(context.Background())
+	if ppty != nil {
+		go copyPtyOutput(writer, ppty, finishLog)
+	} else {
+		finishLog()
+	}
+	if ppty != nil {
+		go writeKeepAlive(ppty)
+	}
+	err = cmd.Run()
+	if err != nil {
+		return err
+	}
+	if tty != nil {
+		writer.AutoStop = true
+		if _, err := tty.Write([]byte{4}); err != nil {
+			common.Logger(ctx).Debug("Failed to write EOT")
+		}
+	}
+	<-logctx.Done()
+
+	if ppty != nil {
+		ppty.Close()
+		ppty = nil
+	}
+	return err
+}
+
+func (e *HostExecutor) Exec(command []string, cmdline string, env map[string]string, user string) common.Executor {
+	return func(ctx context.Context) error {
+		if err := e.exec2(ctx, command, cmdline, env, user); err != nil {
 			select {
 			case <-ctx.Done():
 				if _, err := e.StdOut.Write([]byte("This step was cancelled\n")); err != nil {
