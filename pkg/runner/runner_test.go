@@ -118,6 +118,32 @@ func TestRunEvent(t *testing.T) {
 		{"testdata", "issue-597", "push", "", platforms, ""},
 		{"testdata", "issue-598", "push", "", platforms, ""},
 		{"testdata", "env-and-path", "push", "", platforms, ""},
+		// Test again directly on host
+		{"testdata", "basic", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
+		{"testdata", "fail", "push", "exit with `FAILURE`: 1", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
+		{"testdata", "runs-on", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
+		{"testdata", "checkout", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
+		{"testdata", "shells/bash", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
+		{"testdata", "shells/python", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
+		{"testdata", "shells/sh", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
+		{"testdata", "job-container", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
+		{"testdata", "job-container-non-root", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
+		{"testdata", "uses-docker-url", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
+		{"testdata", "remote-action-docker", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
+		{"testdata", "remote-action-js", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
+		{"testdata", "local-action-docker-url", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
+		{"testdata", "local-action-dockerfile", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
+		{"testdata", "local-action-js", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
+		{"testdata", "matrix", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
+		{"testdata", "matrix-include-exclude", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
+		{"testdata", "commands", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
+		{"testdata", "workdir", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
+		{"testdata", "defaults-run", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
+		{"testdata", "uses-composite", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
+		{"testdata", "issue-597", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
+		{"testdata", "issue-598", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
+		{"testdata", "env-and-path", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
+
 		// {"testdata", "issue-228", "push", "", platforms, ""}, // TODO [igni]: Remove this once everything passes
 
 		// single test for different architecture: linux/arm64
