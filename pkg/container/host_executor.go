@@ -329,7 +329,7 @@ func (e *HostExecutor) Exec(command []string, cmdline string, env map[string]str
 				common.Logger(ctx).Debug("Failed to write error")
 			}
 		}
-		return err
+		return nil
 	}
 }
 
