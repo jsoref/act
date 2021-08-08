@@ -442,7 +442,7 @@ func (cr *containerReference) extractPath(env *map[string]string) common.Executo
 	}
 }
 
-func (cr *containerReference) exec2(cmd []string, env map[string]string, user string, ctx context.Context) error {
+func (cr *containerReference) exec2(ctx context.Context, cmd []string, env map[string]string, user string) error {
 	logger := common.Logger(ctx)
 	// Fix slashes when running on Windows
 	if runtime.GOOS == "windows" {
@@ -527,7 +527,7 @@ func (cr *containerReference) exec(cmd []string, env map[string]string, user str
 			defer func() {
 				done <- errors.New("Invalid Operation")
 			}()
-			done <- cr.exec2(cmd, env, user, ctx)
+			done <- cr.exec2(ctx, cmd, env, user)
 		}()
 		select {
 		case <-ctx.Done():

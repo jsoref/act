@@ -249,6 +249,15 @@ func writeKeepAlive(ppty io.Writer) {
 	}
 }
 
+func copyPtyOutput(writer io.Writer, ppty io.Reader, finishLog context.CancelFunc) {
+	defer func() {
+		finishLog()
+	}()
+	if _, err := io.Copy(writer, ppty); err != nil {
+		return
+	}
+}
+
 func (e *HostExecutor) Exec(command []string, cmdline string, env map[string]string, user string) common.Executor {
 	return func(ctx context.Context) error {
 		envList := getEnvListFromMap(env)
@@ -287,14 +296,7 @@ func (e *HostExecutor) Exec(command []string, cmdline string, env map[string]str
 		writer := &ptyWriter{Out: e.StdOut}
 		logctx, finishLog := context.WithCancel(context.Background())
 		if ppty != nil {
-			go func() {
-				defer func() {
-					finishLog()
-				}()
-				if _, err := io.Copy(writer, ppty); err != nil {
-					return
-				}
-			}()
+			go copyPtyOutput(writer, ppty, finishLog)
 		} else {
 			finishLog()
 		}
