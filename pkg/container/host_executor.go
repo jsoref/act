@@ -191,18 +191,14 @@ func (e *HostExecutor) Start(attach bool) common.Executor {
 type ptyWriter struct {
 	Out      io.Writer
 	AutoStop bool
-	Enabled  bool
 }
 
 func (w *ptyWriter) Write(buf []byte) (int, error) {
-	if w.Enabled {
-		if w.AutoStop && len(buf) > 0 && buf[len(buf)-1] == 4 {
-			n, _ := w.Out.Write(buf[:len(buf)-1])
-			return n, io.EOF
-		}
-		return w.Out.Write(buf)
+	if w.AutoStop && len(buf) > 0 && buf[len(buf)-1] == 4 {
+		n, _ := w.Out.Write(buf[:len(buf)-1])
+		return n, io.EOF
 	}
-	return len(buf), nil
+	return w.Out.Write(buf)
 }
 
 func lookupPathHost(cmd string, env map[string]string, writer io.Writer) (string, error) {
@@ -300,15 +296,13 @@ func (e *HostExecutor) Exec(command []string, cmdline string, env map[string]str
 		} else {
 			finishLog()
 		}
-		writer.Enabled = true
-		err = cmd.Start()
-		if err != nil {
-			return err
-		}
 		if ppty != nil {
 			go writeKeepAlive(ppty)
 		}
-		err = cmd.Wait()
+		err = cmd.Run()
+		if err != nil {
+			return err
+		}
 		if tty != nil {
 			writer.AutoStop = true
 			if _, err := tty.Write([]byte{4}); err != nil {
