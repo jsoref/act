@@ -119,7 +119,7 @@ func TestRunEvent(t *testing.T) {
 		{"testdata", "issue-598", "push", "", platforms, ""},
 		{"testdata", "env-and-path", "push", "", platforms, ""},
 		// Test again directly on host
-		{"testdata", "basic", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
+		// {"testdata", "basic", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""}, Docker actions not supported
 		{"testdata", "fail", "push", "exit with `FAILURE`: 1", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
 		{"testdata", "runs-on", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
 		{"testdata", "checkout", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
@@ -128,11 +128,11 @@ func TestRunEvent(t *testing.T) {
 		{"testdata", "shells/sh", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
 		{"testdata", "job-container", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
 		{"testdata", "job-container-non-root", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
-		{"testdata", "uses-docker-url", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
-		{"testdata", "remote-action-docker", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
+		// {"testdata", "uses-docker-url", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""}, Docker actions not supported
+		// {"testdata", "remote-action-docker", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""}, Docker actions not supported
 		{"testdata", "remote-action-js", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
-		{"testdata", "local-action-docker-url", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
-		{"testdata", "local-action-dockerfile", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
+		// {"testdata", "local-action-docker-url", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""}, Docker actions not supported
+		// {"testdata", "local-action-dockerfile", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""}, Docker actions not supported
 		{"testdata", "local-action-js", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
 		{"testdata", "matrix", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
 		{"testdata", "matrix-include-exclude", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
