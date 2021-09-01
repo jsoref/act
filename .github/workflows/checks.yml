@@ -51,7 +51,7 @@ jobs:
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
-      - run: go test -v -cover -coverprofile=coverage.txt ./...
+      - run: go test -v -cover -coverprofile=coverage.txt -covermode=atomic ./...
         env:
           CGO_ENABLED: 0
       - name: Upload Codecov report
