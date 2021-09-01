@@ -115,6 +115,7 @@ func TestRunEvent(t *testing.T) {
 		{"testdata", "workdir", "push", "", platforms, ""},
 		{"testdata", "defaults-run", "push", "", platforms, ""},
 		{"testdata", "uses-composite", "push", "", platforms, ""},
+		{"testdata", "uses-nested-composite", "push", "", platforms, ""},
 		{"testdata", "issue-597", "push", "", platforms, ""},
 		{"testdata", "issue-598", "push", "", platforms, ""},
 		{"testdata", "env-and-path", "push", "", platforms, ""},
@@ -144,6 +145,7 @@ func TestRunEvent(t *testing.T) {
 		{"testdata", "issue-598", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
 		{"testdata", "env-and-path", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
 
+		{"../model/testdata", "strategy", "push", "", platforms, ""}, // TODO: move all testdata into pkg so we can validate it with planner and runner
 		// {"testdata", "issue-228", "push", "", platforms, ""}, // TODO [igni]: Remove this once everything passes
 
 		// single test for different architecture: linux/arm64

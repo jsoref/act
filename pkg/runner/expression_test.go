@@ -8,9 +8,17 @@ import (
 
 	"github.com/nektos/act/pkg/model"
 	assert "github.com/stretchr/testify/assert"
+	yaml "gopkg.in/yaml.v3"
 )
 
 func TestEvaluate(t *testing.T) {
+	var yml yaml.Node
+	err := yml.Encode(map[string][]interface{}{
+		"os":  {"Linux", "Windows"},
+		"foo": {"bar", "baz"},
+	})
+	assert.NoError(t, err)
+
 	rc := &RunContext{
 		Config: &Config{
 			Workdir: ".",
@@ -28,10 +36,7 @@ func TestEvaluate(t *testing.T) {
 				Jobs: map[string]*model.Job{
 					"job1": {
 						Strategy: &model.Strategy{
-							Matrix: map[string][]interface{}{
-								"os":  {"Linux", "Windows"},
-								"foo": {"bar", "baz"},
-							},
+							RawMatrix: yml,
 						},
 					},
 				},

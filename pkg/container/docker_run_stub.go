@@ -46,7 +46,7 @@ type Container interface {
 	GetContainerArchive(ctx context.Context, srcPath string) (io.ReadCloser, error)
 	Pull(forcePull bool) common.Executor
 	Start(attach bool) common.Executor
-	Exec(command []string, cmdline string, env map[string]string, user string) common.Executor
+	Exec(command []string, cmdline string, env map[string]string, user, workdir string) common.Executor
 	UpdateFromEnv(srcPath string, env *map[string]string) common.Executor
 	UpdateFromPath(env *map[string]string) common.Executor
 	Remove() common.Executor

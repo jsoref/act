@@ -254,8 +254,18 @@ func copyPtyOutput(writer io.Writer, ppty io.Reader, finishLog context.CancelFun
 	}
 }
 
-func (e *HostExecutor) exec2(ctx context.Context, command []string, cmdline string, env map[string]string, user string) error {
+func (e *HostExecutor) exec2(ctx context.Context, command []string, cmdline string, env map[string]string, user, workdir string) error {
 	envList := getEnvListFromMap(env)
+	var wd string
+	if workdir != "" {
+		if strings.HasPrefix(workdir, "/") {
+			wd = workdir
+		} else {
+			wd = fmt.Sprintf("%s/%s", e.Path, workdir)
+		}
+	} else {
+		wd = e.Path
+	}
 	f, err := lookupPathHost(command[0], env, e.StdOut)
 	if err != nil {
 		return err
@@ -267,7 +277,7 @@ func (e *HostExecutor) exec2(ctx context.Context, command []string, cmdline stri
 	cmd.Stdout = e.StdOut
 	cmd.Env = envList
 	cmd.Stderr = e.StdOut
-	cmd.Dir = e.Path
+	cmd.Dir = wd
 	cmd.SysProcAttr = getSysProcAttr(cmdline, false)
 	var ppty *os.File
 	var tty *os.File
@@ -315,9 +325,9 @@ func (e *HostExecutor) exec2(ctx context.Context, command []string, cmdline stri
 	return err
 }
 
-func (e *HostExecutor) Exec(command []string, cmdline string, env map[string]string, user string) common.Executor {
+func (e *HostExecutor) Exec(command []string, cmdline string, env map[string]string, user, workdir string) common.Executor {
 	return func(ctx context.Context) error {
-		if err := e.exec2(ctx, command, cmdline, env, user); err != nil {
+		if err := e.exec2(ctx, command, cmdline, env, workdir, user); err != nil {
 			select {
 			case <-ctx.Done():
 				if _, err := e.StdOut.Write([]byte("This step was cancelled\n")); err != nil {
