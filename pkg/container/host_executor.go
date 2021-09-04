@@ -330,13 +330,9 @@ func (e *HostExecutor) Exec(command []string, cmdline string, env map[string]str
 		if err := e.exec2(ctx, command, cmdline, env, workdir, user); err != nil {
 			select {
 			case <-ctx.Done():
-				if _, err := e.StdOut.Write([]byte("This step was cancelled\n")); err != nil {
-					common.Logger(ctx).Debug("Failed to write step was cancelled")
-				}
+				return errors.Wrapf(err, "This step was cancelled\n")
 			default:
-			}
-			if _, err := e.StdOut.Write([]byte(err.Error() + "\n")); err != nil {
-				common.Logger(ctx).Debug("Failed to write error")
+				return err
 			}
 		}
 		return nil
