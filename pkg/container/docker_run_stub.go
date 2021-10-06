@@ -29,6 +29,7 @@ type NewContainerInput struct {
 	Privileged  bool
 	UsernsMode  string
 	Platform    string
+	Hostname    string
 }
 
 // FileEntry is a file to copy to a container
@@ -48,6 +49,7 @@ type Container interface {
 	Start(attach bool) common.Executor
 	Exec(command []string, cmdline string, env map[string]string, user, workdir string) common.Executor
 	UpdateFromEnv(srcPath string, env *map[string]string) common.Executor
+	UpdateFromImageEnv(env *map[string]string) common.Executor
 	UpdateFromPath(env *map[string]string) common.Executor
 	Remove() common.Executor
 	Close() common.Executor

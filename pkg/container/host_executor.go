@@ -254,6 +254,12 @@ func copyPtyOutput(writer io.Writer, ppty io.Reader, finishLog context.CancelFun
 	}
 }
 
+func (e *HostExecutor) UpdateFromImageEnv(env *map[string]string) common.Executor {
+	return func(ctx context.Context) error {
+		return nil
+	}
+}
+
 func (e *HostExecutor) exec2(ctx context.Context, command []string, cmdline string, env map[string]string, user, workdir string) error {
 	envList := getEnvListFromMap(env)
 	var wd string

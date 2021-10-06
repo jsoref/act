@@ -20,6 +20,7 @@ import (
 	"github.com/go-git/go-billy/v5/helper/polyfill"
 	"github.com/go-git/go-billy/v5/osfs"
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
+	"github.com/joho/godotenv"
 
 	"github.com/docker/cli/cli/connhelper"
 	"github.com/docker/docker/api/types"
@@ -55,6 +56,7 @@ type NewContainerInput struct {
 	Privileged  bool
 	UsernsMode  string
 	Platform    string
+	Hostname    string
 }
 
 var containerAllocateTerminal bool
@@ -84,6 +86,7 @@ type Container interface {
 	Start(attach bool) common.Executor
 	Exec(command []string, cmdline string, env map[string]string, user, workdir string) common.Executor
 	UpdateFromEnv(srcPath string, env *map[string]string) common.Executor
+	UpdateFromImageEnv(env *map[string]string) common.Executor
 	UpdateFromPath(env *map[string]string) common.Executor
 	Remove() common.Executor
 	Close() common.Executor
@@ -178,6 +181,10 @@ func (cr *containerReference) GetContainerArchive(ctx context.Context, srcPath s
 
 func (cr *containerReference) UpdateFromEnv(srcPath string, env *map[string]string) common.Executor {
 	return cr.extractEnv(srcPath, env).IfNot(common.Dryrun)
+}
+
+func (cr *containerReference) UpdateFromImageEnv(env *map[string]string) common.Executor {
+	return cr.extractFromImageEnv(env).IfNot(common.Dryrun)
 }
 
 func (cr *containerReference) UpdateFromPath(env *map[string]string) common.Executor {
@@ -321,8 +328,8 @@ func (cr *containerReference) create(capAdd []string, capDrop []string) common.E
 			return nil
 		}
 		logger := common.Logger(ctx)
-
 		input := cr.input
+
 		config := &container.Config{
 			Image:      input.Image,
 			Cmd:        input.Cmd,
@@ -330,6 +337,7 @@ func (cr *containerReference) create(capAdd []string, capDrop []string) common.E
 			WorkingDir: input.WorkingDir,
 			Env:        input.Env,
 			Tty:        containerAllocateTerminal,
+			Hostname:   input.Hostname,
 		}
 
 		mounts := make([]mount.Mount, 0)
@@ -419,6 +427,38 @@ func (cr *containerReference) extractEnv(srcPath string, env *map[string]string)
 			}
 		}
 		env = &localEnv
+		return nil
+	}
+}
+
+func (cr *containerReference) extractFromImageEnv(env *map[string]string) common.Executor {
+	envMap := *env
+	return func(ctx context.Context) error {
+		logger := common.Logger(ctx)
+
+		inspect, _, err := cr.cli.ImageInspectWithRaw(ctx, cr.input.Image)
+		if err != nil {
+			logger.Error(err)
+		}
+
+		imageEnv, err := godotenv.Unmarshal(strings.Join(inspect.Config.Env, "\n"))
+		if err != nil {
+			logger.Error(err)
+		}
+
+		for k, v := range imageEnv {
+			if k == "PATH" {
+				if envMap[k] == "" {
+					envMap[k] = v
+				} else {
+					envMap[k] += `:` + v
+				}
+			} else if envMap[k] == "" {
+				envMap[k] = v
+			}
+		}
+
+		env = &envMap
 		return nil
 	}
 }

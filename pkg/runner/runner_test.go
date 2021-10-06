@@ -103,6 +103,7 @@ func TestRunEvent(t *testing.T) {
 		{"testdata", "shells/sh", "push", "", platforms, ""},
 		{"testdata", "job-container", "push", "", platforms, ""},
 		{"testdata", "job-container-non-root", "push", "", platforms, ""},
+		{"testdata", "container-hostname", "push", "", platforms, ""},
 		{"testdata", "uses-docker-url", "push", "", platforms, ""},
 		{"testdata", "remote-action-docker", "push", "", platforms, ""},
 		{"testdata", "remote-action-js", "push", "", platforms, ""},
@@ -119,8 +120,6 @@ func TestRunEvent(t *testing.T) {
 		{"testdata", "issue-597", "push", "", platforms, ""},
 		{"testdata", "issue-598", "push", "", platforms, ""},
 		{"testdata", "env-and-path", "push", "", platforms, ""},
-		// Test again directly on host
-		// {"testdata", "basic", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""}, Docker actions not supported
 		{"testdata", "fail", "push", "exit with `FAILURE`: 1", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
 		{"testdata", "runs-on", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
 		{"testdata", "checkout", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
@@ -146,11 +145,7 @@ func TestRunEvent(t *testing.T) {
 		{"testdata", "env-and-path", "push", "", map[string]string{"ubuntu-latest": "-self-hosted"}, ""},
 
 		{"../model/testdata", "strategy", "push", "", platforms, ""}, // TODO: move all testdata into pkg so we can validate it with planner and runner
-		// {"testdata", "issue-228", "push", "", platforms, ""}, // TODO [igni]: Remove this once everything passes
-
 		// single test for different architecture: linux/arm64
-		{"testdata", "basic", "push", "", platforms, "linux/arm64"},
-	}
 	log.SetLevel(log.DebugLevel)
 
 	ctx := context.Background()

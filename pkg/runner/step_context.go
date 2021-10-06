@@ -3,11 +3,9 @@ package runner
 import (
 	"archive/tar"
 	"context"
-	"io"
-
-	// Go told me to?
-	_ "embed"
+	"embed"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path"
@@ -39,6 +37,19 @@ type StepContext struct {
 func (sc *StepContext) execJobContainer() common.Executor {
 	return func(ctx context.Context) error {
 		return sc.RunContext.execJobContainer(sc.Cmd, sc.Cmdline, sc.Env, "", sc.Step.WorkingDirectory)(ctx)
+	}
+}
+
+func (sc *StepContext) interpolateOutputs() common.Executor {
+	return func(ctx context.Context) error {
+		ee := sc.NewExpressionEvaluator()
+		for k, v := range sc.RunContext.Run.Job().Outputs {
+			interpolated := ee.Interpolate(v)
+			if v != interpolated {
+				sc.RunContext.Run.Job().Outputs[k] = interpolated
+			}
+		}
+		return nil
 	}
 }
 
@@ -120,14 +131,13 @@ func (sc *StepContext) Executor() common.Executor {
 func (sc *StepContext) mergeEnv() map[string]string {
 	rc := sc.RunContext
 	job := rc.Run.Job()
-	step := sc.Step
 
 	var env map[string]string
 	c := job.Container()
 	if c != nil {
-		env = mergeMaps(rc.GetEnv(), c.Env, step.GetEnv())
+		env = mergeMaps(rc.GetEnv(), c.Env)
 	} else {
-		env = mergeMaps(rc.GetEnv(), step.GetEnv())
+		env = rc.GetEnv()
 	}
 
 	_, isHost := rc.JobContainer.(*container.HostExecutor)
@@ -163,7 +173,11 @@ func (sc *StepContext) setupEnv(ctx context.Context) (ExpressionEvaluator, error
 	rc := sc.RunContext
 	sc.Env = sc.mergeEnv()
 	if sc.Env != nil {
-		err := rc.JobContainer.UpdateFromEnv(sc.Env["GITHUB_ENV"], &sc.Env)(ctx)
+		err := rc.JobContainer.UpdateFromImageEnv(&sc.Env)(ctx)
+		if err != nil {
+			return nil, err
+		}
+		err = rc.JobContainer.UpdateFromEnv(sc.Env["GITHUB_ENV"], &sc.Env)(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -172,6 +186,7 @@ func (sc *StepContext) setupEnv(ctx context.Context) (ExpressionEvaluator, error
 			return nil, err
 		}
 	}
+	sc.Env = mergeMaps(sc.Env, sc.Step.GetEnv()) // step env should not be overwritten
 	evaluator := sc.NewExpressionEvaluator()
 	sc.interpolateEnv(evaluator)
 
@@ -289,13 +304,6 @@ func (sc *StepContext) newStepContainer(ctx context.Context, image string, cmd [
 	for k, v := range sc.Env {
 		envList = append(envList, fmt.Sprintf("%s=%s", k, v))
 	}
-	stepEE := sc.NewExpressionEvaluator()
-	for i, v := range cmd {
-		cmd[i] = stepEE.Interpolate(v)
-	}
-	for i, v := range entrypoint {
-		entrypoint[i] = stepEE.Interpolate(v)
-	}
 
 	envList = append(envList, fmt.Sprintf("%s=%s", "RUNNER_TOOL_CACHE", "/opt/hostedtoolcache"))
 	envList = append(envList, fmt.Sprintf("%s=%s", "RUNNER_OS", "Linux"))
@@ -329,11 +337,12 @@ func (sc *StepContext) runUsesContainer() common.Executor {
 	step := sc.Step
 	return func(ctx context.Context) error {
 		image := strings.TrimPrefix(step.Uses, "docker://")
-		cmd, err := shellquote.Split(sc.RunContext.NewExpressionEvaluator().Interpolate(step.With["args"]))
+		eval := sc.RunContext.NewExpressionEvaluator()
+		cmd, err := shellquote.Split(eval.Interpolate(step.With["args"]))
 		if err != nil {
 			return err
 		}
-		entrypoint := strings.Fields(step.With["entrypoint"])
+		entrypoint := strings.Fields(eval.Interpolate(step.With["entrypoint"]))
 		stepContainer := sc.newStepContainer(ctx, image, cmd, entrypoint)
 		if stepContainer == nil {
 			return errors.New("Failed to create step container")
@@ -351,7 +360,7 @@ func (sc *StepContext) runUsesContainer() common.Executor {
 }
 
 //go:embed res/trampoline.js
-var trampoline []byte
+var trampoline embed.FS
 
 func (sc *StepContext) setupAction(actionDir string, actionPath string, localAction bool) common.Executor {
 	return func(ctx context.Context) error {
@@ -394,7 +403,11 @@ func (sc *StepContext) setupAction(actionDir string, actionPath string, localAct
 				}
 				if sc.Step.With != nil {
 					if val, ok := sc.Step.With["args"]; ok {
-						err2 := ioutil.WriteFile(filepath.Join(actionDir, actionPath, "trampoline.js"), trampoline, 0400)
+						var b []byte
+						if b, err = trampoline.ReadFile("res/trampoline.js"); err != nil {
+							return err
+						}
+						err2 := ioutil.WriteFile(filepath.Join(actionDir, actionPath, "trampoline.js"), b, 0400)
 						if err2 != nil {
 							return err
 						}
@@ -526,6 +539,31 @@ func (sc *StepContext) runAction(actionDir string, actionPath string, localActio
 	}
 }
 
+func (sc *StepContext) evalDockerArgs(action *model.Action, cmd *[]string) {
+	rc := sc.RunContext
+	step := sc.Step
+	oldInputs := rc.Inputs
+	defer func() {
+		rc.Inputs = oldInputs
+	}()
+	inputs := make(map[string]string)
+	eval := sc.RunContext.NewExpressionEvaluator()
+	// Set Defaults
+	for k, input := range action.Inputs {
+		inputs[k] = eval.Interpolate(input.Default)
+	}
+	if step.With != nil {
+		for k, v := range step.With {
+			inputs[k] = eval.Interpolate(v)
+		}
+	}
+	rc.Inputs = inputs
+	stepEE := sc.NewExpressionEvaluator()
+	for i, v := range *cmd {
+		(*cmd)[i] = stepEE.Interpolate(v)
+	}
+}
+
 func (sc *StepContext) execAsDocker(ctx context.Context, action *model.Action, actionName string, containerLocation string, actionLocation string, rc *RunContext, step *model.Step, localAction bool) error {
 	var prepImage common.Executor
 	var image string
@@ -578,15 +616,16 @@ func (sc *StepContext) execAsDocker(ctx context.Context, action *model.Action, a
 			log.Debugf("image '%s' for architecture '%s' already exists", image, rc.Config.ContainerArchitecture)
 		}
 	}
-
-	cmd, err := shellquote.Split(step.With["args"])
+	eval := sc.NewExpressionEvaluator()
+	cmd, err := shellquote.Split(eval.Interpolate(step.With["args"]))
 	if err != nil {
 		return err
 	}
 	if len(cmd) == 0 {
 		cmd = action.Runs.Args
+		sc.evalDockerArgs(action, &cmd)
 	}
-	entrypoint := strings.Fields(step.With["entrypoint"])
+	entrypoint := strings.Fields(eval.Interpolate(step.With["entrypoint"]))
 	if len(entrypoint) == 0 {
 		entrypoint = action.Runs.Entrypoint
 	}
@@ -617,6 +656,17 @@ func (sc *StepContext) execAsComposite(ctx context.Context, step *model.Step, _ 
 			return err
 		}
 	}
+	inputs := make(map[string]string)
+	eval := sc.RunContext.NewExpressionEvaluator()
+	// Set Defaults
+	for k, input := range action.Inputs {
+		inputs[k] = eval.Interpolate(input.Default)
+	}
+	if step.With != nil {
+		for k, v := range step.With {
+			inputs[k] = eval.Interpolate(v)
+		}
+	}
 	// Doesn't work with the command processor has a pointer to the original rc
 	// compositerc := rc.Clone()
 	// Workaround start
@@ -636,17 +686,14 @@ func (sc *StepContext) execAsComposite(ctx context.Context, step *model.Step, _ 
 	compositerc.ActionRef = ""
 	compositerc.ActionRepository = ""
 	compositerc.Composite = action
-	compositerc.Env = mergeMaps(compositerc.Env, step.Environment())
-	inputs := make(map[string]string)
-	eval := sc.RunContext.NewExpressionEvaluator()
-	// Set Defaults
-	for k, input := range action.Inputs {
-		inputs[k] = eval.Interpolate(input.Default)
-	}
-	if step.With != nil {
-		for k, v := range step.With {
-			inputs[k] = eval.Interpolate(v)
-		}
+	envToEvaluate := mergeMaps(compositerc.Env, step.Environment())
+	compositerc.Env = make(map[string]string)
+	// origEnvMap: is used to pass env changes back to parent runcontext
+	origEnvMap := make(map[string]string)
+	for k, v := range envToEvaluate {
+		ev := eval.Interpolate(v)
+		origEnvMap[k] = ev
+		compositerc.Env[k] = ev
 	}
 	compositerc.Inputs = inputs
 	compositerc.ExprEval = compositerc.NewExpressionEvaluator()
@@ -657,12 +704,21 @@ func (sc *StepContext) execAsComposite(ctx context.Context, step *model.Step, _ 
 
 	// Map outputs to parent rc
 	eval = (&StepContext{
+		Env:        compositerc.Env,
 		RunContext: compositerc,
 	}).NewExpressionEvaluator()
 	for outputName, output := range action.Outputs {
 		backup.setOutput(ctx, map[string]string{
 			"name": outputName,
 		}, eval.Interpolate(output.Value))
+	}
+	// Test if evaluated parent env was altered by this composite step
+	// Known Issues:
+	// - you try to set an env variable to the same value as a scoped step env, will be discared
+	for k, v := range compositerc.Env {
+		if ov, ok := origEnvMap[k]; !ok || ov != v {
+			backup.Env[k] = v
+		}
 	}
 	return nil
 }
