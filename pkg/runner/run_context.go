@@ -45,7 +45,7 @@ type RunContext struct {
 	ActionRef         string
 	ActionRepository  string
 	Composite         *model.Action
-	Inputs            map[string]string
+	Inputs            map[string]interface{}
 	Parent            *RunContext
 }
 
