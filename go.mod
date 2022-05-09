@@ -12,7 +12,7 @@ require (
 	github.com/containerd/continuity v0.2.0 // indirect
 	github.com/docker/cli v20.10.10+incompatible
 	github.com/docker/distribution v2.7.1+incompatible
-	github.com/docker/docker v20.10.10+incompatible
+	github.com/docker/docker v20.10.15+incompatible
 	github.com/go-git/go-billy/v5 v5.3.1
 	github.com/go-git/go-git/v5 v5.4.2
 	github.com/go-ini/ini v1.64.0
@@ -44,7 +44,7 @@ require (
 	golang.org/x/sys v0.0.0-20210923061019-b8560ed6a9b7 // indirect
 	golang.org/x/term v0.0.0-20210916214954-140adaaadfaf
 	golang.org/x/text v0.3.7 // indirect
-	google.golang.org/genproto v0.0.0-20210921142501-181ce0d877f6 // indirect
+	google.golang.org/protobuf v1.27.1 // indirect
 	gopkg.in/sourcemap.v1 v1.0.5 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
 )
