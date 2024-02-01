@@ -315,6 +315,12 @@ To run `act` with secrets, you can enter them interactively, supply them as envi
 - `act --secret-file my.secrets` - load secrets values from `my.secrets` file.
   - secrets file format is the same as `.env` format
 
+## `.secrets`
+
+By default you can create a `.secrets` file in the root of the repository and it will be used automatically.
+
+Note that you should add `.secrets` to your `.gitignore` file, otherwise the `.secrets` file will be leaked to your workflows.
+
 # Vars
 
 To run `act` with repository variables that are acessible inside the workflow via ${{ vars.VARIABLE }}, you can enter them interactively or load them from a file. The following options are available for providing github repository variables:
