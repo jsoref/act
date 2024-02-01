@@ -313,7 +313,7 @@ To run `act` with secrets, you can enter them interactively, supply them as envi
 - `act -s MY_SECRET=somevalue` - use `somevalue` as the value for `MY_SECRET`.
 - `act -s MY_SECRET` - check for an environment variable named `MY_SECRET` and use it if it exists. If the environment variable is not defined, prompt the user for a value.
 - `act --secret-file my.secrets` - load secrets values from `my.secrets` file.
-  - secrets file format is the same as `.env` format
+  - secrets file format is the same as the [`.env`](#env) format
 
 # Vars
 
@@ -321,7 +321,7 @@ To run `act` with repository variables that are acessible inside the workflow vi
 
 - `act --var VARIABLE=somevalue` - use `somevalue` as the value for `VARIABLE`.
 - `act --var-file my.variables` - load variables values from `my.variables` file.
-  - variables file format is the same as `.env` format
+  - variables file format is the same as the [`.env`](#env) format
 
 # Configuration
 
@@ -332,17 +332,21 @@ You can provide default configuration flags to `act` by either creating a `./.ac
 -P ubuntu-latest=nektos/act-environments-ubuntu:18.04
 ```
 
-Additionally, act supports loading environment variables from an `.env` file. The default is to look in the working directory for the file but can be overridden by:
+## `.env`
 
-```sh
-act --env-file my.env
-```
+Act supports loading environment variables from an `.env` file.
+
+By default, act will look for the `.env` file in the working directory:
 
 `.env`:
-
 ```env
 MY_ENV_VAR=MY_ENV_VAR_VALUE
 MY_2ND_ENV_VAR="my 2nd env var value"
+```
+
+To specificy an alternative file:
+```sh
+act --env-file my.env
 ```
 
 # Skipping jobs
